@@ -96,7 +96,7 @@ Not copied from PNC (not needed / would add deps): `wellness/llm.py` (OpenAI/Oll
 Returns whether a Gemini key is configured and which model is used.
 ```bash
 curl http://localhost:8000/
-# {"status":"ok","gemini_configured":true,"model":"gemini-2.5-flash"}
+# {"status":"ok","gemini_configured":true,"model":"gemini-3.8-flash"}
 ```
 
 ### `POST /chat` - Phase 1 education
@@ -151,7 +151,7 @@ python -m pytest -q           # tests (no API key needed)
 | `ensurepip is not available` when creating venv | `sudo apt install python3.12-venv` (Ubuntu/Debian) |
 | `"source":"mock"` in replies | `.env` missing or `GEMINI_API_KEY` empty; restart uvicorn after editing `.env` |
 | HTTP 502 `API key not valid` | Wrong key; create one at https://aistudio.google.com/apikey |
-| HTTP 502 `404 ... model not found` | Set `GEMINI_MODEL` in `.env` to a model your key can use (e.g. `gemini-2.5-flash`) |
-| HTTP 502 `429 RESOURCE_EXHAUSTED` | Free-tier rate limit; wait a minute or switch to `gemini-2.5-flash-lite` |
+| HTTP 502 `404` model no longer available (new API keys) | Set `GEMINI_MODEL=gemini-3.8-flash` in `.env` and restart uvicorn (`2.5-*` is blocked for new users) |
+| HTTP 502 `429 RESOURCE_EXHAUSTED` | Free-tier rate limit; wait a minute or switch to `gemini-3.5-flash-lite` |
 | `ModuleNotFoundError: app` | Run commands from the repo root, not inside `app/` |
 | Browser CORS error | CORS is open (`*`) in `app/main.py`; make sure you hit the right port |

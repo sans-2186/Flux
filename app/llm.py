@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 DISCLAIMER = "Not financial advice - just education to help you decide."
 
 EDUCATION_PROMPT = (
