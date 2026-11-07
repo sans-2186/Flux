@@ -82,6 +82,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 | `wellness/LICENSE-PNC` | PNC repo's Apache-2.0 license (required when redistributing their code) |
 | `tests/test_wellness.py` | Tests for the vendored PNC math (subset of PNC's tests + a forecast test) |
 | `tests/test_api.py` | API tests for `/` and `/chat` (Gemini monkeypatched, no key needed) |
+| `setup.sh` | Mac/Linux one-shot: creates `.venv`, installs deps, copies `.env.example` if needed |
 | `requirements.txt` | Pinned dependencies |
 | `.env.example` | Template for `GEMINI_API_KEY`, `GEMINI_MODEL` |
 | `.gitignore` | Ignores `.venv`, `.env`, caches, `data/*.json` |
@@ -144,6 +145,8 @@ python -m pytest -q           # tests (no API key needed)
 
 | Error | Fix |
 |---|---|
+| `source: no such file or directory: .venv/bin/activate` | Run `python3 -m venv .venv` first (or `./setup.sh`) |
+| `ModuleNotFoundError: No module named 'fastapi'` | Activate venv (`source .venv/bin/activate`), run `pip install -r requirements.txt`; don't use global `/Library/.../bin/uvicorn` |
 | `ensurepip is not available` when creating venv | `sudo apt install python3.12-venv` (Ubuntu/Debian) |
 | `"source":"mock"` in replies | `.env` missing or `GEMINI_API_KEY` empty; restart uvicorn after editing `.env` |
 | HTTP 502 `API key not valid` | Wrong key; create one at https://aistudio.google.com/apikey |
