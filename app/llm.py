@@ -10,12 +10,15 @@ from app import demo_fallbacks
 
 load_dotenv()
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# Lite default: much faster for 3–5 sentence Phase 1 answers than gemini-3.8-flash.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "280"))
 DISCLAIMER = "Not financial advice - just education to help you decide."
 
 EDUCATION_PROMPT = (
     "You are Flux, a friendly voice-first money coach for Gen Z. "
-    "Explain the user's money question in plain, casual language in 3 to 5 short sentences. "
+    "Explain the user's money question in plain, casual language in 3 to 5 short sentences, "
+    "under 90 words total. "
     "Use one simple everyday example if it helps. No markdown, no bullet lists, no emojis, "
     "because your answer is read aloud. Do not do calculations with specific numbers about "
     "the user's own finances; if they ask about their personal situation, explain the concept "
@@ -27,7 +30,7 @@ _client = None
 
 
 def _parse_fallback_models() -> list[str]:
-    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-3.5-flash-lite,gemini-3.1-flash-lite")
+    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-3.1-flash-lite")
     extra = [m.strip() for m in raw.split(",") if m.strip()]
     seen: set[str] = set()
     out: list[str] = []
@@ -65,12 +68,27 @@ def _retryable(exc: BaseException) -> bool:
     return any(x in s for x in ("503", "429", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "HIGH DEMAND"))
 
 
-def _call_gemini(client, model: str, message: str) -> str:
+def _generate_config():
     from google.genai import types
+    cfg = types.GenerateContentConfig(
+        system_instruction=EDUCATION_PROMPT,
+        temperature=0.35,
+        max_output_tokens=MAX_OUTPUT_TOKENS,
+    )
+    # Skip extended "thinking" when the model supports it (saves seconds on 3.x).
+    budget = os.getenv("GEMINI_THINKING_BUDGET", "0")
+    try:
+        cfg.thinking_config = types.ThinkingConfig(thinking_budget=int(budget))
+    except (TypeError, ValueError):
+        pass
+    return cfg
+
+
+def _call_gemini(client, model: str, message: str) -> str:
     resp = client.models.generate_content(
         model=model,
         contents=message,
-        config=types.GenerateContentConfig(system_instruction=EDUCATION_PROMPT, temperature=0.4),
+        config=_generate_config(),
     )
     text = (resp.text or "").strip()
     if not text:
@@ -103,15 +121,15 @@ def explain(message):
 
     errors: list[str] = []
     for model in MODEL_CHAIN:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 text = _call_gemini(client, model, message)
                 source = "gemini" if model == MODEL_CHAIN[0] else f"gemini:{model}"
                 return text, source
             except Exception as e:
                 errors.append(f"{model}#{attempt + 1}: {e}")
-                if _retryable(e) and attempt < 2:
-                    time.sleep(0.4 * (attempt + 1))
+                if _retryable(e) and attempt < 1:
+                    time.sleep(0.25)
                     continue
                 if _retryable(e):
                     break
