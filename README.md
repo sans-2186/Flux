@@ -1,4 +1,4 @@
-# Nudge
+# Flux
 
 Voice-first AI money coach for Gen Z (HackUTD). FastAPI + Gemini; all financial math is deterministic Python.
 Synthetic data only. Not financial advice.

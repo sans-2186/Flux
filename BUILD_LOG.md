@@ -1,4 +1,4 @@
-# Nudge - Build Log
+# Flux - Build Log
 
 Voice-first AI money coach for Gen Z (HackUTD: PNC 360° Financial Health Navigator, Toyota "What's Your Next Move?", Gemini API).
 
@@ -7,6 +7,7 @@ Status: **Step 1 done** - project set up from PNC's workshop repo, FastAPI skele
 ## Saved checkpoints
 
 Each finished phase gets a git tag pushed to GitHub, so you can always get back to it.
+The code lives on the branch `cursor/nudge-backend-setup-a1cb` (branch name is from the old working title) until PR #1 is merged into `main`; `main` only has the initial README until then.
 
 | Tag | Contents |
 |---|---|

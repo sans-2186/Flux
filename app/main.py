@@ -1,4 +1,4 @@
-"""Nudge API. Run: uvicorn app.main:app --reload"""
+"""Flux API. Run: uvicorn app.main:app --reload"""
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from app import llm
 
-app = FastAPI(title="Nudge API", version="0.1.0")
+app = FastAPI(title="Flux API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
