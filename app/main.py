@@ -1,7 +1,7 @@
 """Flux API. Run: uvicorn app.main:app --reload"""
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -24,14 +24,19 @@ class ChatResponse(BaseModel):
 
 @app.get("/")
 def root():
-    return {"status": "ok", "gemini_configured": llm.get_client() is not None,
-            "model": llm.GEMINI_MODEL}
+    return {
+        "status": "ok",
+        "gemini_configured": llm.get_client() is not None,
+        "model": llm.GEMINI_MODEL,
+        "model_fallbacks": llm.MODEL_CHAIN,
+    }
 
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     try:
         text, source = llm.explain(req.message)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini call failed: {e}")
+    except Exception:
+        # Presentation-safe: HTTP 200 + canned education copy instead of 502
+        text, source = llm._offline_answer(req.message)
     return ChatResponse(reply=llm.with_disclaimer(text), mode="education", source=source)

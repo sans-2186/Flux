@@ -153,5 +153,6 @@ python -m pytest -q           # tests (no API key needed)
 | HTTP 502 `API key not valid` | Wrong key; create one at https://aistudio.google.com/apikey |
 | HTTP 502 `404` model no longer available (new API keys) | Set `GEMINI_MODEL=gemini-3.8-flash` in `.env` and restart uvicorn (`2.5-*` is blocked for new users) |
 | HTTP 502 `429 RESOURCE_EXHAUSTED` | Free-tier rate limit; wait a minute or switch to `gemini-3.5-flash-lite` |
+| HTTP 502 `503` high demand during demo | `git pull` — `/chat` now retries other models then returns **HTTP 200** with a canned answer; check `"source":"fallback_canned"` |
 | `ModuleNotFoundError: app` | Run commands from the repo root, not inside `app/` |
 | Browser CORS error | CORS is open (`*`) in `app/main.py`; make sure you hit the right port |
