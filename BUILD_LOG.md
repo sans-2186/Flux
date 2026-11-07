@@ -4,6 +4,46 @@ Voice-first AI money coach for Gen Z (HackUTD: PNC 360° Financial Health Naviga
 
 Status: **Step 1 done** - project set up from PNC's workshop repo, FastAPI skeleton, `POST /chat` Phase 1 (education) wired to Gemini.
 
+## Saved checkpoints
+
+Each finished phase gets a git tag pushed to GitHub, so you can always get back to it.
+
+| Tag | Contents |
+|---|---|
+| `phase-1` | Setup + PNC wellness math + `/chat` education |
+
+```bash
+# first time on your laptop
+git clone https://github.com/sans-2186/Flux.git && cd Flux
+git fetch --tags && git checkout cursor/nudge-backend-setup-a1cb
+# later, to pull new work
+git pull
+# to look at an old phase without losing anything
+git checkout phase-1        # go back to main work with: git checkout cursor/nudge-backend-setup-a1cb
+```
+
+## Expected results (how to know it works)
+
+**Phase 1 (done)**
+- `python -m pytest -q` prints `9 passed`.
+- `curl http://localhost:8000/` returns `{"status":"ok","gemini_configured":true,...}`. If it says `false`, your `.env` is not loaded.
+- `POST /chat {"message":"what is an IRA?"}` returns `"source":"gemini"`, `"mode":"education"`, a casual 3-5 sentence answer with no markdown, ending in `Not financial advice - just education to help you decide.` Wording varies run to run; the structure should not.
+- Without a key: same shape but `"source":"mock"` and a placeholder reply.
+- Empty message returns HTTP 422. Bad key returns HTTP 502 with `API key not valid`.
+
+**Phase 2 (planned)**
+- `/onboard` returns a `user_id` and a budget whose categories add up to the monthly income you sent.
+- `/health/{user_id}` returns 4+ indicators, each with `value`, `status` (`good`/`ok`/`risk`) and a one-line explanation. Example: income 3000, expenses 2400 gives savings rate 0.20 = `good`.
+- Tools are exact and repeatable: same input always gives the same numbers (checked by pytest). Example: car value 15000, loan 11000 gives trade-in equity +4000.
+- `/chat` with `user_id` and "can I buy a $300 bag?" answers yes/no using the tool's numbers, never numbers Gemini made up.
+
+**Phase 3 (planned)**
+- Adding a transaction 5x bigger than usual, from a new merchant, or at 3 AM shows up in `/alerts/{user_id}` with a plain-language reason. A normal-sized grocery purchase does not.
+- `/handoff` returns a short who / what / why summary.
+
+**Voice (planned)**
+- `/speak` returns playable audio, or the frontend falls back to browser speech if TTS is flaky.
+
 ---
 
 ## 1. Dependencies
