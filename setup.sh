@@ -10,7 +10,16 @@ python3 -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+# Prefer prebuilt wheels (avoids compiling cryptography + Rust on Mac when disk is tight)
+if ! pip install -r requirements.txt; then
+  echo ""
+  echo "If you saw 'No space left on device' or a cryptography/Rust error:"
+  echo "  1. Free several GB (Trash, Downloads, Xcode simulators, old Docker images)."
+  echo "  2. rm -rf .venv ~/Library/Caches/puccinialin"
+  echo "  3. python3 -m pip cache purge"
+  echo "  4. Run ./setup.sh again"
+  exit 1
+fi
 if [[ ! -f .env ]]; then
   cp .env.example .env
   echo "Created .env — add your GEMINI_API_KEY before using /chat with Gemini."

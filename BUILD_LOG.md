@@ -147,6 +147,7 @@ python -m pytest -q           # tests (no API key needed)
 |---|---|
 | `source: no such file or directory: .venv/bin/activate` | Run `python3 -m venv .venv` first (or `./setup.sh`) |
 | `ModuleNotFoundError: No module named 'fastapi'` | Activate venv (`source .venv/bin/activate`), run `pip install -r requirements.txt`; don't use global `/Library/.../bin/uvicorn` |
+| `cryptography` / Rust / `No space left on device (os error 28)` on Mac | Disk is full. Free space (often 2–5 GB+), then `python3 -m pip cache purge`, `rm -rf .venv ~/Library/Caches/puccinialin`, rerun `./setup.sh` |
 | `ensurepip is not available` when creating venv | `sudo apt install python3.12-venv` (Ubuntu/Debian) |
 | `"source":"mock"` in replies | `.env` missing or `GEMINI_API_KEY` empty; restart uvicorn after editing `.env` |
 | HTTP 502 `API key not valid` | Wrong key; create one at https://aistudio.google.com/apikey |
