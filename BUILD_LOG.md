@@ -59,7 +59,7 @@ git fetch --tags && git checkout phase-1                      # look at an old p
 
 **Voice (done)**
 - `POST /speak {"text":"Hi Maya, you are on track."}` returns `{"audio_base64":"UklGR...","mime_type":"audio/wav","source":"gemini_tts:<model>","text":"..."}`. Play it in the browser with `new Audio("data:audio/wav;base64," + audio_base64).play()`.
-- If TTS fails (no key, model unavailable, busy), it still returns HTTP 200 with `"audio_base64":null` and `"source":"browser_speech"`: the frontend should then call `speechSynthesis.speak(new SpeechSynthesisUtterance(text))`. So the demo never shows an error.
+- If TTS fails (no key, model unavailable, busy), it still returns HTTP 200 with the cause in `reason` / `errors`, and it tries any TTS model your key lists (`models.list`, names containing `tts`) before giving up; the first model that works is remembered until restart. It returns HTTP 200 with `"audio_base64":null` and `"source":"browser_speech"`: the frontend should then call `speechSynthesis.speak(new SpeechSynthesisUtterance(text))`. So the demo never shows an error.
 
 ---
 
@@ -120,6 +120,8 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 
 ## 3. Endpoints (with curl)
 
+**Using the `/docs` page (Swagger):** every endpoint has an example dropdown above the request body (and above the `user_id` box). Pick one before clicking Execute. If you leave Swagger's default placeholder (`"string"`), you get 404 (unknown user) or 422 (invalid value), and `/alerts` shows 0 because nothing was stored. Order for the Phase 3 demo: `/transactions` "Large purchase", then "New merchant + abroad + 3 AM", then `/alerts/C002`, then `/handoff`.
+
 Sample user used below (saved as shell variable `UID_` after onboarding):
 
 ```bash
@@ -161,7 +163,7 @@ Body `{"text": str, "voice": str | null}` (voice default `Kore`). Always HTTP 20
 ```bash
 curl -s -X POST localhost:8000/speak -H 'Content-Type: application/json' -d '{"text":"Hi Maya, you are on track."}'
 # {"audio_base64":"UklGRi...","mime_type":"audio/wav","source":"gemini_tts:gemini-2.5-flash-preview-tts","text":"Hi Maya, you are on track."}
-# fallback: {"audio_base64":null,"mime_type":null,"source":"browser_speech","text":"...","reason":"Gemini TTS unavailable"}
+# fallback: {"audio_base64":null,"mime_type":null,"source":"browser_speech","text":"...","reason":"Gemini TTS failed for every model tried","tried_models":[...],"errors":["<model>: <Gemini's error>"]}
 ```
 
 ### `POST /transactions`
@@ -295,7 +297,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 # paste GEMINI_API_KEY into .env
 source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000     # interactive docs: http://localhost:8000/docs
-python -m pytest -q              # 145 tests, no API key needed
+python -m pytest -q              # 146 tests, no API key needed
 ```
 Use a second terminal for curl. After editing `.env`, restart uvicorn.
 

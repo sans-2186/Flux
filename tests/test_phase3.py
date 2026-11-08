@@ -24,14 +24,16 @@ def clean(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "_users", None)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(llm, "_client", None)
+    monkeypatch.setattr(voice, "_working_model", None)
     fraud.reset()
 
 
 class FakeServer:
     """Fake Gemini REST server. `respond(path, body)` returns (status, json payload)."""
 
-    def __init__(self, respond):
+    def __init__(self, respond, models=()):
         self.requests = []
+        self.list_calls = 0
         outer = self
 
         class H(BaseHTTPRequestHandler):
@@ -41,6 +43,16 @@ class FakeServer:
                 status, payload = respond(self.path, body)
                 data = json.dumps(payload).encode()
                 self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                outer.list_calls += 1
+                data = json.dumps({"models": [{"name": f"models/{m}", "supportedGenerationMethods": ["generateContent"]}
+                                              for m in models]}).encode()
+                self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
@@ -126,7 +138,24 @@ def test_speak_falls_back_to_browser_when_every_tts_model_fails(monkeypatch):
         r = client.post("/speak", json={"text": "hi"})
     finally:
         fake.close()
-    assert r.status_code == 200 and r.json()["source"] == "browser_speech" and r.json()["audio_base64"] is None
+    body = r.json()
+    assert r.status_code == 200 and body["source"] == "browser_speech" and body["audio_base64"] is None
+    assert body["tried_models"] == ["a-tts", "b-tts"] and "boom" in body["errors"][0]
+
+
+def test_speak_discovers_a_working_tts_model_when_configured_ones_are_unavailable(monkeypatch):
+    monkeypatch.setattr(voice, "TTS_CHAIN", ["old-tts"])
+    fake = FakeServer(lambda path, body: (404, {"error": {"code": 404, "message": "not found", "status": "NOT_FOUND"}})
+                      if "old-tts" in path else audio_reply(), models=["gemini-x-flash", "new-tts", "old-tts"]).connect(monkeypatch)
+    try:
+        first = client.post("/speak", json={"text": "hi"}).json()
+        second = client.post("/speak", json={"text": "hi again"}).json()
+        paths = [p for p, _ in fake.requests]
+    finally:
+        fake.close()
+    assert first["source"] == "gemini_tts:new-tts" and second["source"] == "gemini_tts:new-tts"
+    assert fake.list_calls == 1
+    assert "new-tts" in paths[-1] and "old-tts" not in paths[-1]
 
 
 def test_speak_validation():

@@ -58,25 +58,57 @@ def _tts_once(client, model: str, text: str, voice: str):
     return inline.data, inline.mime_type or ""
 
 
+_working_model = None
+
+
+def _attempt(client, model: str, spoken: str, voice: str, errors: list):
+    for attempt in range(2):
+        try:
+            pcm, mime = _tts_once(client, model, spoken, voice)
+            wav = pcm_to_wav(pcm, _rate_from_mime(mime))
+            return {"audio_base64": base64.b64encode(wav).decode(), "mime_type": "audio/wav",
+                    "source": f"gemini_tts:{model}", "text": spoken}
+        except Exception as e:
+            log.warning("Gemini TTS %s attempt %d failed: %s", model, attempt + 1, e)
+            if llm._retryable(e) and attempt < 1:
+                time.sleep(0.25)
+                continue
+            errors.append(f"{model}: {str(e)[:300]}")
+            return None
+
+
+def _discover_tts_models(client, tried: list) -> list:
+    """Ask the API which TTS models this key can use (names containing 'tts')."""
+    try:
+        names = [m.name.removeprefix("models/") for m in client.models.list() if "tts" in (m.name or "").lower()]
+    except Exception as e:
+        log.warning("Could not list Gemini models: %s", e)
+        return []
+    return [n for n in names if n not in tried][:3]
+
+
 def speak(text: str, voice: str = None) -> dict:
     """Returns {audio_base64, mime_type, source, ...}. audio_base64 is None when the frontend should
-    use the browser's speech synthesis instead (source = "browser_speech")."""
+    use the browser's speech synthesis instead (source = "browser_speech"; `reason` says why)."""
+    global _working_model
     spoken = clean_for_speech(text)
     fallback = {"audio_base64": None, "mime_type": None, "source": "browser_speech", "text": spoken}
     client = llm.get_client()
     if client is None:
         return {**fallback, "reason": "no GEMINI_API_KEY configured"}
-    for model in TTS_CHAIN:
-        for attempt in range(2):
-            try:
-                pcm, mime = _tts_once(client, model, spoken, voice or DEFAULT_VOICE)
-                wav = pcm_to_wav(pcm, _rate_from_mime(mime))
-                return {"audio_base64": base64.b64encode(wav).decode(), "mime_type": "audio/wav",
-                        "source": f"gemini_tts:{model}", "text": spoken}
-            except Exception as e:
-                log.warning("Gemini TTS %s attempt %d failed: %s", model, attempt + 1, e)
-                if llm._retryable(e) and attempt < 1:
-                    time.sleep(0.25)
-                    continue
-                break
-    return {**fallback, "reason": "Gemini TTS unavailable"}
+    errors = []
+    tried = []
+    chain = ([_working_model] if _working_model else []) + TTS_CHAIN
+    for model in dict.fromkeys(chain):
+        tried.append(model)
+        result = _attempt(client, model, spoken, voice or DEFAULT_VOICE, errors)
+        if result:
+            _working_model = model
+            return result
+    for model in _discover_tts_models(client, tried):
+        tried.append(model)
+        result = _attempt(client, model, spoken, voice or DEFAULT_VOICE, errors)
+        if result:
+            _working_model = model
+            return result
+    return {**fallback, "reason": "Gemini TTS failed for every model tried", "tried_models": tried, "errors": errors}

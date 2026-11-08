@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
@@ -80,10 +80,46 @@ class HandoffRequest(BaseModel):
     conversation: List[str] = []
 
 
+USER_ID_EXAMPLES = {
+    "pnc": {"summary": "PNC customer (Maya)", "value": "C002"},
+    "toyota": {"summary": "Toyota customer (Kevin, hardship)", "value": "TY-C014"},
+}
+PATH_USER = Path(openapi_examples=USER_ID_EXAMPLES)
+
+CHAT_EXAMPLES = {
+    "education": {"summary": "Education (no user)", "value": {"message": "what is an IRA?"}},
+    "afford": {"summary": "Can I afford it? (C002)", "value": {"message": "can I buy a $300 bag?", "user_id": "C002"}},
+    "retire": {"summary": "Retirement (C002)", "value": {"message": "can I retire at 50 on 90k?", "user_id": "C002"}},
+    "trade_in": {"summary": "Trade-in (C008)", "value": {"message": "should I trade in my car?", "user_id": "C008"}},
+    "spending": {"summary": "Spending breakdown (C002)", "value": {"message": "where is my money going?", "user_id": "C002"}},
+    "toyota": {"summary": "Toyota hardship (TY-C014)", "value": {"message": "I missed two payments, what now?", "user_id": "TY-C014"}},
+    "toyota_refi": {"summary": "Toyota refinance (TY-C001)", "value": {"message": "Am I overpaying on my loan?", "user_id": "TY-C001"}},
+}
+TX_EXAMPLES = {
+    "normal": {"summary": "Normal purchase (not flagged)", "value": {
+        "user_id": "C002", "amount": 200, "merchant": "Chipotle", "category": "dining", "timestamp": "2026-11-07T12:30:00"}},
+    "large": {"summary": "Large purchase (medium)", "value": {
+        "user_id": "C002", "amount": 1300, "merchant": "Chipotle", "category": "dining", "timestamp": "2026-11-07T12:30:00"}},
+    "risky": {"summary": "New merchant + abroad + 3 AM (high)", "value": {
+        "user_id": "C002", "amount": 40, "merchant": "Crypto Exchange Ltd", "category": "shopping",
+        "country": "RO", "timestamp": "2026-11-07T03:12:00"}},
+}
+HANDOFF_EXAMPLES = {
+    "toyota": {"summary": "Toyota hardship customer", "value": {"user_id": "TY-C014"}},
+    "pnc": {"summary": "PNC customer with a reason", "value": {"user_id": "C002", "reason": "Wants to dispute a charge"}},
+}
+SPEAK_EXAMPLES = {"hello": {"summary": "Short line", "value": {"text": "Hi Maya, you are on track."}}}
+ONBOARD_EXAMPLES = {"sam": {"summary": "Sam", "value": {
+    "name": "Sam", "age": 22, "monthly_income": 3200, "monthly_expenses": 2100, "savings": 3500,
+    "debts": [{"name": "student loan", "balance": 14000, "monthly_payment": 180}],
+    "credit_card_balance": 900, "credit_limit": 3000, "goals": ["buy a car"]}}}
+
+
 def _user_or_404(user_id: str) -> dict:
     user = store.get_user(user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="Unknown user_id. Call POST /onboard first.")
+        raise HTTPException(status_code=404, detail=f"Unknown user_id '{user_id}'. Use C001-C030 or TY-C001-TY-C020 "
+                                                    "(see /demo-users), or an id returned by POST /onboard.")
     return user
 
 
@@ -106,7 +142,7 @@ def demo_users():
 
 
 @app.post("/onboard")
-def onboard(req: OnboardRequest):
+def onboard(req: OnboardRequest = Body(openapi_examples=ONBOARD_EXAMPLES)):
     record = req.model_dump()
     record["budget"] = finance.generate_budget(record)
     user_id = store.add_user(record)
@@ -115,7 +151,7 @@ def onboard(req: OnboardRequest):
 
 
 @app.get("/next-move/{user_id}")
-def next_move(user_id: str):
+def next_move(user_id: str = Path(openapi_examples={"toyota": {"summary": "Toyota customer", "value": "TY-C001"}})):
     """Toyota track, no LLM: facts, guardrails and the options this customer may be shown."""
     user = _user_or_404(user_id)
     if user.get("source") != "toyota_pack":
@@ -124,7 +160,7 @@ def next_move(user_id: str):
 
 
 @app.get("/health/{user_id}")
-def health(user_id: str):
+def health(user_id: str = Path(openapi_examples={"pnc": {"summary": "PNC customer", "value": "C002"}})):
     user = _user_or_404(user_id)
     if user.get("source") == "toyota_pack":
         raise HTTPException(status_code=400, detail="Toyota demo customers only have vehicle-finance data. "
@@ -134,7 +170,7 @@ def health(user_id: str):
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+def chat(req: ChatRequest = Body(openapi_examples=CHAT_EXAMPLES)):
     if req.user_id:
         user = _user_or_404(req.user_id)
         text, source, tools = agent.coach_reply(user, req.message)
@@ -149,14 +185,14 @@ def chat(req: ChatRequest):
 
 
 @app.post("/speak")
-def speak(req: SpeakRequest):
+def speak(req: SpeakRequest = Body(openapi_examples=SPEAK_EXAMPLES)):
     """Gemini TTS. Always HTTP 200. `audio_base64` is a WAV; if it is null, speak `text` with the browser's
     speechSynthesis instead (`source` = "browser_speech")."""
     return voice.speak(req.text, req.voice)
 
 
 @app.post("/transactions")
-def add_transaction(req: TransactionRequest):
+def add_transaction(req: TransactionRequest = Body(openapi_examples=TX_EXAMPLES)):
     """Submit a card transaction. Returns the flags (large amount, new merchant, foreign, odd hour)."""
     _user_or_404(req.user_id)
     when = datetime.fromisoformat(req.timestamp.replace("Z", "+00:00")) if req.timestamp else datetime.now()
@@ -164,7 +200,7 @@ def add_transaction(req: TransactionRequest):
 
 
 @app.get("/alerts/{user_id}")
-def alerts(user_id: str, explain: bool = True):
+def alerts(user_id: str = PATH_USER, explain: bool = True):
     """Flagged transactions, newest first, each with a plain-language explanation (Gemini, else fixed text)."""
     _user_or_404(user_id)
     found = fraud.alerts_for(user_id, explain=explain)
@@ -172,6 +208,6 @@ def alerts(user_id: str, explain: bool = True):
 
 
 @app.post("/handoff")
-def handoff_summary(req: HandoffRequest):
+def handoff_summary(req: HandoffRequest = Body(openapi_examples=HANDOFF_EXAMPLES)):
     """Who / what / why / next step summary for a human agent. Plain Python, no LLM."""
     return handoff.build(_user_or_404(req.user_id), req.reason, req.conversation)
