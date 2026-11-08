@@ -8,6 +8,7 @@
     "ui": {
       "root": "ui",
       "framework": "nextjs",
+      "buildCommand": "node scripts/vercel-prepare.mjs && next build",
       "bindings": [
         {
           "type": "service",

@@ -47,7 +47,8 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - `main.py` at the repo root re-exports the app for Vercel's FastAPI runtime; `store._path()` falls back to `/tmp/flux-users.json` when `VERCEL` is set.
 - The UI picks its backend base automatically: `localhost:8000` when served from localhost, `/api/flux` otherwise. `NEXT_PUBLIC_FLUX_BACKEND_URL` still overrides.
 - The extension tries `127.0.0.1:8000` first and falls back to `https://myflux.us/api/flux`.
-- **Still required before a deploy succeeds:** Payload needs `PAYLOAD_SECRET` and a hosted database for `ui`'s `payload build`, and `app` needs `GEMINI_API_KEY` in Vercel's environment variables.
+- **Demo-only build on CI:** `payload build` fails on Vercel with `Environment ID could not be resolved` because the Figma/Payload platform resolves `FIGMA_EID` from a local project cache. `ui/scripts/vercel-prepare.mjs` therefore removes `src/app/(payload)` and `src/app/(frontend)/flux-api` when `FIGMA_EID` / `FIGMA_CONTENT_API_CONTENT_SYSTEM_ID` are absent, and the service builds with plain `next build`. Set both variables (or `FLUX_DEMO_ONLY=0`) to keep the admin. Local `pnpm dev` is untouched.
+- `app` still needs `GEMINI_API_KEY` in Vercel's environment variables, or the coach falls back to mock replies.
 
 ## Saved checkpoints
 
