@@ -1,0 +1,335 @@
+{
+ "_note": "MOCK extras for the PNC synthetic customers. PNC's data has no names, ages, goals or vehicles. Vehicle values are made-up estimates (MSRP x 0.87^age). Edit freely.",
+ "people": {
+  "C001": {
+   "name": "Sam",
+   "age": 25,
+   "goals": [
+    "buy a car",
+    "save for a house down payment"
+   ]
+  },
+  "C002": {
+   "name": "Maya",
+   "age": 30,
+   "goals": [
+    "build an emergency fund",
+    "pay off student loans"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla Cross",
+    "year": 2023,
+    "value": 15800.0
+   }
+  },
+  "C003": {
+   "name": "Jordan",
+   "age": 29,
+   "goals": [
+    "build an emergency fund",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Camry",
+    "year": 2019,
+    "value": 9900.0
+   }
+  },
+  "C004": {
+   "name": "Aaliyah",
+   "age": 26,
+   "goals": [
+    "pay off credit card",
+    "pay off student loans"
+   ]
+  },
+  "C005": {
+   "name": "Diego",
+   "age": 21,
+   "goals": [
+    "travel fund",
+    "build an emergency fund"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla Cross",
+    "year": 2023,
+    "value": 15800.0
+   }
+  },
+  "C006": {
+   "name": "Priya",
+   "age": 23,
+   "goals": [
+    "build an emergency fund",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Tacoma",
+    "year": 2022,
+    "value": 18100.0
+   }
+  },
+  "C007": {
+   "name": "Tyler",
+   "age": 23,
+   "goals": [
+    "build an emergency fund",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla Cross",
+    "year": 2020,
+    "value": 10600.0
+   }
+  },
+  "C008": {
+   "name": "Zoe",
+   "age": 22,
+   "goals": [
+    "pay off credit card",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "RAV4",
+    "year": 2023,
+    "value": 20400.0
+   }
+  },
+  "C009": {
+   "name": "Malik",
+   "age": 22,
+   "goals": [
+    "pay off credit card",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Tacoma",
+    "year": 2024,
+    "value": 24200.0
+   }
+  },
+  "C010": {
+   "name": "Chloe",
+   "age": 21,
+   "goals": [
+    "pay off credit card",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla",
+    "year": 2023,
+    "value": 14100.0
+   }
+  },
+  "C011": {
+   "name": "Andre",
+   "age": 30,
+   "goals": [
+    "travel fund",
+    "pay off student loans"
+   ]
+  },
+  "C012": {
+   "name": "Sofia",
+   "age": 25,
+   "goals": [
+    "pay off student loans",
+    "start investing"
+   ]
+  },
+  "C013": {
+   "name": "Ethan",
+   "age": 27,
+   "goals": [
+    "retire early",
+    "buy a car"
+   ]
+  },
+  "C014": {
+   "name": "Naomi",
+   "age": 23,
+   "goals": [
+    "buy a car",
+    "retire early"
+   ]
+  },
+  "C015": {
+   "name": "Luis",
+   "age": 32,
+   "goals": [
+    "save for a house down payment",
+    "build an emergency fund"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Tacoma",
+    "year": 2021,
+    "value": 16500.0
+   }
+  },
+  "C016": {
+   "name": "Hannah",
+   "age": 25,
+   "goals": [
+    "pay off student loans",
+    "buy a car"
+   ]
+  },
+  "C017": {
+   "name": "Kai",
+   "age": 29,
+   "goals": [
+    "pay off credit card",
+    "build an emergency fund"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Tacoma",
+    "year": 2022,
+    "value": 18300.0
+   }
+  },
+  "C018": {
+   "name": "Imani",
+   "age": 25,
+   "goals": [
+    "buy a car",
+    "save for a house down payment"
+   ]
+  },
+  "C019": {
+   "name": "Owen",
+   "age": 26,
+   "goals": [
+    "build an emergency fund",
+    "retire early"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla",
+    "year": 2025,
+    "value": 19300.0
+   }
+  },
+  "C020": {
+   "name": "Camila",
+   "age": 32,
+   "goals": [
+    "retire early",
+    "buy a car"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Highlander",
+    "year": 2021,
+    "value": 20100.0
+   }
+  },
+  "C021": {
+   "name": "Devin",
+   "age": 29,
+   "goals": [
+    "pay off student loans",
+    "build an emergency fund"
+   ]
+  },
+  "C022": {
+   "name": "Aria",
+   "age": 21,
+   "goals": [
+    "start investing",
+    "save for a house down payment"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Highlander",
+    "year": 2024,
+    "value": 29000.0
+   }
+  },
+  "C023": {
+   "name": "Marcus",
+   "age": 31,
+   "goals": [
+    "start investing",
+    "retire early"
+   ]
+  },
+  "C024": {
+   "name": "Lena",
+   "age": 29,
+   "goals": [
+    "pay off student loans",
+    "buy a car"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Highlander",
+    "year": 2022,
+    "value": 23800.0
+   }
+  },
+  "C025": {
+   "name": "Jaden",
+   "age": 25,
+   "goals": [
+    "build an emergency fund",
+    "save for a house down payment"
+   ]
+  },
+  "C026": {
+   "name": "Nia",
+   "age": 25,
+   "goals": [
+    "buy a car",
+    "start investing"
+   ],
+   "vehicle": {
+    "make": "Toyota",
+    "model": "Corolla",
+    "year": 2022,
+    "value": 12000.0
+   }
+  },
+  "C027": {
+   "name": "Caleb",
+   "age": 32,
+   "goals": [
+    "start investing",
+    "pay off credit card"
+   ]
+  },
+  "C028": {
+   "name": "Rosa",
+   "age": 31,
+   "goals": [
+    "save for a house down payment",
+    "pay off student loans"
+   ]
+  },
+  "C029": {
+   "name": "Theo",
+   "age": 26,
+   "goals": [
+    "pay off student loans",
+    "build an emergency fund"
+   ]
+  },
+  "C030": {
+   "name": "Amara",
+   "age": 22,
+   "goals": [
+    "pay off student loans",
+    "save for a house down payment"
+   ]
+  }
+ }
+}

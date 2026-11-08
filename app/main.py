@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import agent, finance, llm, store
+from app import agent, finance, llm, mockdata, store
 
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -47,6 +47,7 @@ class OnboardRequest(BaseModel):
     debts: List[Debt] = []
     credit_card_balance: float = Field(default=0, ge=0)
     credit_limit: float = Field(default=0, ge=0)
+    credit_card_payment: float = Field(default=0, ge=0)
     goals: List[str] = []
     vehicle: Optional[Vehicle] = None
 
@@ -68,19 +69,26 @@ def root():
     }
 
 
+@app.get("/demo-users")
+def demo_users():
+    """The 30 PNC mock customers. Use their user_id (C001..C030) in /health and /chat."""
+    return mockdata.list_users()
+
+
 @app.post("/onboard")
 def onboard(req: OnboardRequest):
     record = req.model_dump()
     record["budget"] = finance.generate_budget(record)
     user_id = store.add_user(record)
-    return {"user_id": user_id, "name": req.name, "budget": record["budget"],
+    return {"user_id": user_id, "name": req.name, "data_source": "form", "budget": record["budget"],
             "health": finance.health_indicators(record)}
 
 
 @app.get("/health/{user_id}")
 def health(user_id: str):
     user = _user_or_404(user_id)
-    return {"user_id": user_id, "name": user["name"], "indicators": finance.health_indicators(user)}
+    return {"user_id": user_id, "name": user["name"], "data_source": user.get("source", "form"),
+            "indicators": finance.health_indicators(user)}
 
 
 @app.post("/chat", response_model=ChatResponse)

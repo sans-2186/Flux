@@ -12,9 +12,10 @@ COACH_PROMPT = (
     "You are Flux, a friendly voice-first money coach for Gen Z, talking to {name}. "
     "You know NOTHING about their money except what the tools return. "
     "For any question about their finances, call the right tool first, then explain the result. "
-    "Never do arithmetic yourself and never invent numbers: only quote numbers from tool results. "
+    "Never do arithmetic yourself and never invent or assume numbers: only quote numbers from tool results. "
+    "If a tool reports missing_inputs, ask the user for exactly those values and stop; do not guess them. "
     "Use tool results to give a clear yes or no when they ask for one. "
-    "For retirement answers, mention the key assumptions briefly. "
+    "For retirement answers, say which inputs came from the user's records and which they gave you. "
     "For car trade-in answers, state the equity and give the single next step. "
     "If the question is general and needs no personal numbers, just explain it simply. "
     "Answer in 3 to 5 short, casual sentences with no markdown, lists or emojis, because it is read aloud. "
@@ -32,12 +33,22 @@ def make_tools(user: dict, trace: list):
         return finance.can_afford(user, price)
 
     def retirement_check(target_age: int, annual_income: Optional[float] = None,
-                         current_savings: Optional[float] = None) -> dict:
-        """Check if the user is on track to retire at target_age. annual_income is yearly income in
-        dollars and current_savings is dollars saved so far; both default to the user's profile if
-        omitted. Returns on_track, projected balance, needed balance and the assumptions used."""
+                         current_savings: Optional[float] = None,
+                         monthly_contribution: Optional[float] = None,
+                         annual_return_pct: Optional[float] = None) -> dict:
+        """Check if the user can retire at target_age. annual_income is the YEARLY INCOME THEY WANT
+        IN RETIREMENT in dollars (for 'retire at 50 on 90k' use 90000). The other values default to
+        the user's records; only pass them if the user stated them. If the result has
+        missing_inputs, ask the user for those values instead of guessing."""
         trace.append("retirement_check")
-        return finance.retirement_check(user, target_age, annual_income, current_savings)
+        return finance.retirement_check(user, target_age, annual_income, current_savings,
+                                        monthly_contribution, annual_return_pct)
+
+    def spending_breakdown(months: int = 3) -> dict:
+        """Average monthly spending by category over the last N months from the user's real
+        transaction history, with the change versus the N months before."""
+        trace.append("spending_breakdown")
+        return finance.spending_breakdown(user, months)
 
     def forecast_balances(months: int = 12) -> dict:
         """Project the user's cash balance for the next number of months, with monthly income,
@@ -67,7 +78,8 @@ def make_tools(user: dict, trace: list):
         trace.append("health_check")
         return {"indicators": finance.health_indicators(user)}
 
-    return [can_afford, retirement_check, forecast_balances, what_if, trade_in_check, health_check]
+    return [can_afford, retirement_check, forecast_balances, what_if, trade_in_check,
+            spending_breakdown, health_check]
 
 
 def health_fallback(user: dict) -> str:

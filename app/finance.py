@@ -12,11 +12,6 @@ from wellness.forecast import forecast_cash
 from wellness.metrics import compute_metrics
 
 EMERGENCY_MIN_MONTHS = 3
-CARD_MIN_RATE = 0.02
-CARD_MIN_FLOOR = 25.0
-BUDGET_SAVINGS_RATE = 0.20
-BUDGET_WEIGHTS = [("housing", 0.40), ("food", 0.20), ("transport", 0.10),
-                  ("utilities", 0.08), ("fun", 0.15), ("subscriptions", 0.07)]
 _RANK = {"risk": 0, "ok": 1, "good": 2}
 
 
@@ -25,13 +20,11 @@ def _r(x):
 
 
 def monthly_debt_payments(user):
-    """Loan payments + vehicle payment + an assumed credit-card minimum payment."""
+    """Scheduled payments on loans, the vehicle and the credit card, exactly as recorded."""
     total = sum(d["monthly_payment"] for d in user.get("debts", []))
     if user.get("vehicle"):
         total += user["vehicle"]["monthly_payment"]
-    ccb = user.get("credit_card_balance", 0)
-    if ccb > 0:
-        total += max(CARD_MIN_FLOOR, CARD_MIN_RATE * ccb)
+    total += user.get("credit_card_payment", 0)
     total += user.get("debt_payment_adjust", 0)
     return round(max(total, 0), 2)
 
@@ -66,26 +59,28 @@ def build_profile(user):
 
 
 def generate_budget(user):
-    """Recommended monthly budget: fixed debt payments, 20% savings, rest split by fixed weights.
+    """Monthly budget built only from the user's own numbers.
 
-    Categories sum to monthly income unless debt payments alone exceed income (over_budget).
+    Spending categories are the user's real 12-month averages when a ledger exists; otherwise
+    one `expenses` line with the number they typed. Debt payments are the scheduled payments.
+    Savings is whatever income is left. If nothing is left, over_budget is true and `shortfall`
+    shows the gap (total then exceeds income by the shortfall).
     """
     income, debt = user["monthly_income"], monthly_debt_payments(user)
-    available = income - debt
-    savings = min(BUDGET_SAVINGS_RATE * income, max(available, 0))
-    pool = max(available - savings, 0)
-    cats = {name: round(pool * w, 2) for name, w in BUDGET_WEIGHTS}
-    cats["debt_payments"] = round(debt, 2)
-    cats["savings"] = round(savings, 2)
-    if available >= 0:
-        cats["savings"] = round(cats["savings"] + income - sum(cats.values()), 2)
-    return {"monthly_income": income, "categories": cats, "total": round(sum(cats.values()), 2),
-            "over_budget": available < 0,
-            "current_monthly_expenses": user["monthly_expenses"]}
+    spend = dict(user.get("spending_by_category") or {"expenses": user["monthly_expenses"]})
+    basis = "ledger_last_12_months" if user.get("spending_by_category") else "typed_in_expenses"
+    leftover = round(income - debt - sum(spend.values()), 2)
+    cats = {**spend, "debt_payments": round(debt, 2), "savings": max(leftover, 0.0)}
+    return {"monthly_income": income, "basis": basis, "categories": cats,
+            "total": round(sum(cats.values()), 2), "over_budget": leftover < 0,
+            "shortfall": round(max(-leftover, 0), 2)}
 
 
 def _explain(key, v):
     if key == "savings_rate":
+        if v < 0:
+            return (f"You spend about {abs(v) * 100:.1f}% more than you earn after debt payments; "
+                    "aim to keep 20% or more.")
         return (f"You keep {v:.0%} of income after expenses and debt payments; aim for 20% or more.")
     if key == "debt_to_income":
         return (f"Debt payments take {v:.0%} of your income; under 20% is healthy, over 36% is risky.")
@@ -138,6 +133,8 @@ def can_afford(user, price):
                f"below {EMERGENCY_MIN_MONTHS} months.")
     return {
         "price": _r(price), "affordable": affordable, "reason": why,
+        "rule": f"Yes if it fits in one month of leftover cash, or if paying from savings keeps "
+                f"{EMERGENCY_MIN_MONTHS}+ months of bills covered.",
         "monthly_surplus": surplus,
         "months_of_surplus_to_save_up": _r(price / surplus) if surplus > 0 else None,
         "savings_before": _r(user["savings"]), "savings_if_paid_from_savings": _r(savings_after),
@@ -147,35 +144,88 @@ def can_afford(user, price):
 
 
 def retirement_check(user, target_age, annual_income=None, current_savings=None,
-                     contribution_rate=0.15, real_return=0.05,
-                     replacement_rate=0.80, withdrawal_rate=0.04):
-    """Project retirement savings in today's dollars. Social Security is ignored (conservative)."""
-    income = annual_income if annual_income else user["monthly_income"] * 12
-    start = user["savings"] if current_savings is None else current_savings
+                     monthly_contribution=None, annual_return_pct=None):
+    """Will the retirement account reach the amount needed by target_age?
+
+    No hidden assumptions. Each input is either given by the user or read from their records;
+    if one is unavailable the function lists it under `missing_inputs` instead of guessing.
+      annual_income        yearly income the user WANTS in retirement (always from the user)
+      current_savings      retirement balance (default: the IRA balance on record)
+      monthly_contribution what they actually put in each month (default: IRA deposits on record)
+      annual_return_pct    yearly return (default: the IRA's recorded yield)
+    Needed balance = desired income / yearly return, i.e. living on returns without spending
+    principal. Growth compounds monthly. Nominal dollars: no inflation, taxes or Social Security.
+    """
+    rec = user.get("retirement") or {}
+    given = {"annual_income": annual_income, "current_savings": current_savings,
+             "monthly_contribution": monthly_contribution, "annual_return_pct": annual_return_pct}
+    records = {"current_savings": rec.get("balance"), "monthly_contribution": rec.get("monthly_contribution"),
+               "annual_return_pct": rec.get("annual_return_pct")}
+    labels = {"annual_income": "annual_income (the yearly income you want in retirement)",
+              "current_savings": "current_savings (what you have saved for retirement)",
+              "monthly_contribution": "monthly_contribution (what you put in each month)",
+              "annual_return_pct": "annual_return_pct (expected yearly return in percent)"}
+    used, inputs, missing = {}, {}, []
+    for key in labels:
+        if given[key] is not None:
+            used[key], inputs[key] = given[key], {"value": given[key], "source": "provided by the user"}
+        elif records.get(key) is not None:
+            used[key], inputs[key] = records[key], {"value": records[key], "source": "the user's records"}
+        else:
+            missing.append(labels[key])
+    if missing:
+        return {"missing_inputs": missing,
+                "message": "Ask the user for these values. Do not guess them."}
+    if used["annual_return_pct"] <= 0:
+        return {"error": "annual_return_pct must be above 0 to size the target balance."}
+
     years = max(target_age - user["age"], 0)
-    growth = (1 + real_return) ** years
-    annual_contrib = income * contribution_rate
-    annuity = years if real_return == 0 else (growth - 1) / real_return
-    projected = start * growth + annual_contrib * annuity
-    needed = income * replacement_rate / withdrawal_rate
-    gap = max(needed - start * growth, 0)
-    required_monthly = (gap / annuity / 12) if annuity else None
+    n = years * 12
+    rm = used["annual_return_pct"] / 100 / 12
+    growth = (1 + rm) ** n
+    annuity = (growth - 1) / rm
+    projected = used["current_savings"] * growth + used["monthly_contribution"] * annuity
+    needed = used["annual_income"] / (used["annual_return_pct"] / 100)
+    gap = max(needed - used["current_savings"] * growth, 0)
     return {
         "on_track": projected >= needed, "target_age": target_age, "current_age": user["age"],
-        "years_to_go": years, "projected_balance": _r(projected), "needed_balance": _r(needed),
+        "years_to_go": years, "desired_annual_income": _r(used["annual_income"]),
+        "projected_balance": _r(projected), "needed_balance": _r(needed),
         "shortfall": _r(max(needed - projected, 0)),
-        "monthly_contribution_assumed": _r(annual_contrib / 12),
-        "monthly_contribution_needed": _r(required_monthly),
-        "assumptions": [
-            f"Annual income used: ${income:,.0f}; current savings used: ${start:,.0f}",
-            f"You save {contribution_rate:.0%} of income every year",
-            f"{real_return:.0%} yearly investment return after inflation (today's dollars)",
-            f"You need {replacement_rate:.0%} of your income in retirement",
-            f"You withdraw {withdrawal_rate:.0%} per year, so the target is "
-            f"{replacement_rate / withdrawal_rate:.0f}x annual income",
-            "Social Security and pensions are ignored",
-        ],
+        "monthly_contribution_used": _r(used["monthly_contribution"]),
+        "monthly_contribution_needed": _r(gap / annuity) if n else None,
+        "inputs": inputs,
+        "rule": "Needed balance = desired yearly income / yearly return (live on returns, keep the principal).",
+        "limits": "Nominal dollars; no inflation, taxes or Social Security.",
     }
+
+
+def spending_breakdown(user, months=3):
+    """Average monthly spending by category over the last N months, versus the N months before."""
+    hist = user.get("spending_history")
+    if not hist:
+        return {"missing_inputs": ["spending history (no transactions on record for this user)"],
+                "message": "Tell the user there is no transaction history to analyze."}
+    months = max(1, min(int(months), len(hist) // 2 or 1))
+    keys = sorted(hist)
+    last, prev = keys[-months:], keys[-2 * months:-months]
+
+    def avg(period):
+        out = {}
+        for m in period:
+            for cat, amt in hist[m].items():
+                out[cat] = out.get(cat, 0) + amt / len(period)
+        return out
+
+    now, before = avg(last), avg(prev)
+    rows = []
+    for cat, a in sorted(now.items(), key=lambda kv: -kv[1]):
+        b = before.get(cat)
+        rows.append({"category": cat, "monthly_average": _r(a),
+                     "change_vs_previous_period_pct": round((a - b) / b * 100, 1) if b else None})
+    return {"period": f"{last[0]} to {last[-1]}", "months": months,
+            "monthly_average_total": _r(sum(now.values())),
+            "top_category": rows[0]["category"], "by_category": rows}
 
 
 def forecast_balances(user, months=12):

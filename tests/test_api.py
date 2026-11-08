@@ -75,6 +75,19 @@ def test_health_endpoint():
         assert i["status"] in ("good", "ok", "risk") and i["explanation"]
 
 
+def test_demo_users_listed_and_usable():
+    users = client.get("/demo-users").json()
+    assert len(users) == 30 and users[0]["user_id"] == "C001"
+    r = client.get("/health/C001").json()
+    assert r["data_source"] == "pnc_mock" and len(r["indicators"]) == 4
+
+
+def test_chat_on_mock_customer_falls_back_with_real_numbers(monkeypatch):
+    monkeypatch.setattr(llm, "run_chain", lambda *a, **k: None)
+    r = client.post("/chat", json={"message": "how am I doing?", "user_id": "C002"}).json()
+    assert r["mode"] == "coach" and "Savings rate" in r["reply"]
+
+
 def test_health_unknown_user_404():
     assert client.get("/health/u_nope").status_code == 404
 
@@ -140,4 +153,4 @@ def test_chat_coach_runs_real_function_calling_loop(monkeypatch):
     assert "affordable=True for price 300." in r["reply"]
     declared = {d["name"] for t in FakeGemini.seen[0]["tools"] for d in t["functionDeclarations"]}
     assert declared == {"can_afford", "retirement_check", "forecast_balances", "what_if",
-                        "trade_in_check", "health_check"}
+                        "trade_in_check", "spending_breakdown", "health_check"}

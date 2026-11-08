@@ -1,8 +1,13 @@
-"""Tiny user store: a dict in memory, mirrored to a JSON file (default data/users.json)."""
+"""User lookup: PNC mock customers (read-only) and users added via /onboard.
+
+Onboarded users live in memory, mirrored to a JSON file (default data/users.json).
+"""
 import json
 import os
 import uuid
 from pathlib import Path
+
+from app import mockdata
 
 _users = None
 
@@ -22,6 +27,7 @@ def _load():
 def add_user(record):
     users = _load()
     record["user_id"] = "u_" + uuid.uuid4().hex[:8]
+    record["source"] = "form"
     users[record["user_id"]] = record
     p = _path()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -30,4 +36,4 @@ def add_user(record):
 
 
 def get_user(user_id):
-    return _load().get(user_id)
+    return _load().get(user_id) or mockdata.get_user(user_id)
