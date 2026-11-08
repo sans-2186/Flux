@@ -1,11 +1,12 @@
 """Flux API. Run: uvicorn app.main:app --reload"""
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from app import agent, finance, llm, mockdata, store, toyota
+from app import agent, finance, fraud, handoff, llm, mockdata, store, toyota, voice
 
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -50,6 +51,33 @@ class OnboardRequest(BaseModel):
     credit_card_payment: float = Field(default=0, ge=0)
     goals: List[str] = []
     vehicle: Optional[Vehicle] = None
+
+
+class SpeakRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    voice: Optional[str] = None
+
+
+class TransactionRequest(BaseModel):
+    user_id: str
+    amount: float = Field(gt=0)
+    merchant: str = Field(min_length=1, max_length=120)
+    category: Optional[str] = None
+    country: str = Field(default="US", min_length=2, max_length=3)
+    timestamp: Optional[str] = Field(default=None, description="ISO time, e.g. 2026-11-07T03:12:00. Default: now.")
+
+    @field_validator("timestamp")
+    @classmethod
+    def _valid_time(cls, v):
+        if v is not None:
+            datetime.fromisoformat(v.replace("Z", "+00:00"))
+        return v
+
+
+class HandoffRequest(BaseModel):
+    user_id: str
+    reason: Optional[str] = Field(default=None, max_length=500)
+    conversation: List[str] = []
 
 
 def _user_or_404(user_id: str) -> dict:
@@ -118,3 +146,32 @@ def chat(req: ChatRequest):
         # Presentation-safe: HTTP 200 + canned education copy instead of 502
         text, source = llm._offline_answer(req.message)
     return ChatResponse(reply=llm.with_disclaimer(text), mode="education", source=source)
+
+
+@app.post("/speak")
+def speak(req: SpeakRequest):
+    """Gemini TTS. Always HTTP 200. `audio_base64` is a WAV; if it is null, speak `text` with the browser's
+    speechSynthesis instead (`source` = "browser_speech")."""
+    return voice.speak(req.text, req.voice)
+
+
+@app.post("/transactions")
+def add_transaction(req: TransactionRequest):
+    """Submit a card transaction. Returns the flags (large amount, new merchant, foreign, odd hour)."""
+    _user_or_404(req.user_id)
+    when = datetime.fromisoformat(req.timestamp.replace("Z", "+00:00")) if req.timestamp else datetime.now()
+    return fraud.record_transaction(req.user_id, req.amount, req.merchant, req.category, req.country, when)
+
+
+@app.get("/alerts/{user_id}")
+def alerts(user_id: str, explain: bool = True):
+    """Flagged transactions, newest first, each with a plain-language explanation (Gemini, else fixed text)."""
+    _user_or_404(user_id)
+    found = fraud.alerts_for(user_id, explain=explain)
+    return {"user_id": user_id, "count": len(found), "alerts": found}
+
+
+@app.post("/handoff")
+def handoff_summary(req: HandoffRequest):
+    """Who / what / why / next step summary for a human agent. Plain Python, no LLM."""
+    return handoff.build(_user_or_404(req.user_id), req.reason, req.conversation)

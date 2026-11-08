@@ -1,0 +1,7 @@
+{
+  "_note": "MOCK: PNC's dataset has no merchant names (descriptions are just 'Purchase'). These typical merchants per category let Flux tell a familiar merchant from a new one. Invented for the demo.",
+  "dining": ["Chipotle", "Starbucks", "Whataburger", "Local Taqueria", "Pizza Hut"],
+  "groceries": ["H-E-B", "Walmart", "Trader Joe's", "Kroger"],
+  "shopping": ["Target", "Amazon", "Old Navy", "Best Buy"],
+  "transport": ["Shell", "Chevron", "Uber", "DART"]
+}

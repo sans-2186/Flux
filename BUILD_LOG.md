@@ -2,7 +2,7 @@
 
 Voice-first AI money coach for Gen Z (HackUTD: PNC 360° Financial Health Navigator, Toyota "What's Your Next Move?", Gemini API).
 
-Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/health`, Gemini tools, personalized `/chat`), now **grounded on PNC's mock dataset** (no hidden assumptions, see "How the agent uses the mock data"). **Toyota track added** (vehicle finances, from Toyota's "Next Move" data pack: `/next-move`). Next: Voice `/speak`, then Phase 3 (fraud alert).
+Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/health`, Gemini tools, personalized `/chat`), now **grounded on PNC's mock dataset** (no hidden assumptions, see "How the agent uses the mock data"). **Toyota track added** (vehicle finances, from Toyota's "Next Move" data pack: `/next-move`). **Voice `/speak` done.** **Phase 3 done** (`/transactions`, `/alerts/{id}`, `/handoff`). All phases are built; what remains is testing with a real Gemini key.
 
 ## Saved checkpoints
 
@@ -14,6 +14,7 @@ Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished p
 | `phase-2` | `/onboard`, `/health`, deterministic tools, Gemini function calling in `/chat` (first version, used some assumptions) |
 | `phase-2.1` | Same, grounded on PNC's mock data: 30 demo customers, no assumed rates/payments/budget weights |
 | `phase-2.2` | Adds the Toyota data pack: 20 Toyota customers (`TY-C001`..`TY-C020`), `/next-move/{id}`, Toyota guardrails, coach tools for vehicle finance |
+| `phase-3` | Adds `/speak` (Gemini TTS with browser-speech fallback), `/transactions` flags, `/alerts/{id}`, `/handoff` |
 
 ```bash
 git clone https://github.com/sans-2186/Flux.git && cd Flux   # latest work
@@ -49,12 +50,16 @@ git fetch --tags && git checkout phase-1                      # look at an old p
 - `POST /chat {"message":"I missed two payments, what now?","user_id":"TY-C014"}` uses only `next_move_options` and `trade_in_check`, offers a specialist, and does not upsell. Without Gemini it answers from the data (`"source":"fallback_health"`).
 - `GET /health/TY-C001` returns HTTP 400 (Toyota customers only have vehicle-finance data); use `/next-move/TY-C001`.
 
-**Phase 3 (planned)**
-- A transaction 5x bigger than usual, from a new merchant, or at 3 AM shows up in `/alerts/{user_id}` with a plain-language reason. A normal grocery purchase does not.
-- `/handoff` returns a short who / what / why summary.
+**Phase 3 (done)** - checked on a running server with the PNC customer `C002` (Maya; her usual dining purchase is $204.50)
+- `POST /transactions` `{"user_id":"C002","amount":200,"merchant":"Chipotle","category":"dining","timestamp":"2026-11-07T12:30:00"}` returns `"flagged":false`.
+- Same with `"amount":1300` (still midday) returns `flags:[large_amount]`, severity `medium`: "$1,300.00 is 6.4x your usual dining purchase of $204.50, z-score 83.4."
+- `{"amount":40,"merchant":"Crypto Exchange Ltd","category":"shopping","country":"RO","timestamp":"2026-11-07T03:12:00"}` returns flags `new_merchant`, `foreign`, `odd_hour`, severity `high`.
+- `GET /alerts/C002` lists the flagged ones, newest first, each with a plain-language `explanation` (`explanation_source` is `gemini`; `fallback` if Gemini was busy) ending in the disclaimer. A normal purchase never appears.
+- `POST /handoff {"user_id":"TY-C014"}` returns a who / what / why / next-step summary: Kevin, 2025 Tacoma SR5 loan, 2 missed payments, vulnerable, contact by Phone, no upsell. For `C002` it lists the health indicators and flagged transactions.
 
-**Voice (planned)**
-- `/speak` returns playable audio from Gemini TTS, or the frontend falls back to browser speech if TTS is flaky.
+**Voice (done)**
+- `POST /speak {"text":"Hi Maya, you are on track."}` returns `{"audio_base64":"UklGR...","mime_type":"audio/wav","source":"gemini_tts:<model>","text":"..."}`. Play it in the browser with `new Audio("data:audio/wav;base64," + audio_base64).play()`.
+- If TTS fails (no key, model unavailable, busy), it still returns HTTP 200 with `"audio_base64":null` and `"source":"browser_speech"`: the frontend should then call `speechSynthesis.speak(new SpeechSynthesisUtterance(text))`. So the demo never shows an error.
 
 ---
 
@@ -81,6 +86,10 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 | File | What it does |
 |---|---|
 | `app/main.py` | FastAPI app and endpoints: `GET /`, `GET /demo-users`, `POST /onboard`, `GET /health/{id}`, `GET /next-move/{id}`, `POST /chat`; CORS open |
+| `app/voice.py` | `/speak`: Gemini TTS (16-bit 24 kHz PCM wrapped into WAV), model fallback chain, browser-speech fallback; strips markdown before speaking |
+| `app/fraud.py` | Phase 3: transaction flag rules (large amount, new merchant, foreign, odd hour), severity, alert store, Gemini plain-language explanation with fixed-text fallback |
+| `app/handoff.py` | Phase 3: who/what/why/next-step summary for a human agent (plain Python, no LLM) |
+| `mock/merchants.json` | **MOCK**: typical merchants per spending category (PNC's data has no merchant names) |
 | `app/toyota.py` | **Toyota track**: loads the data pack into customer records; `next_move_options` (guardrails + option list), `trade_in_check`, data-only fallback text. Plain Python, no LLM |
 | `mock/toyota/*.csv` | Toyota's "Next Move" pack, copied unchanged: customers, accounts, vehicles, situations, 142 precomputed option scenarios, offers catalog, rate sheet, value drivers, and `golden_answers.csv` (the answer key; used only by tests, never by the agent) |
 | `app/finance.py` | **All deterministic math**: budget, health indicators, can_afford, retirement_check, spending_breakdown, forecast_balances, what_if, trade_in_equity/trade_in_check |
@@ -101,6 +110,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 | `wellness/__init__.py`, `wellness/LICENSE-PNC` | Package marker; PNC's Apache-2.0 license |
 | `tests/test_finance.py` | Tests for the math: affordability, retirement (known values, missing inputs), trade-in equity, health, budget, spending, forecast, what-if |
 | `tests/test_mockdata.py` | Checks the loader against the raw CSVs: balances, scheduled payments, IRA data, vehicles, all 30 customers |
+| `tests/test_phase3.py` | Voice (WAV conversion, fallbacks, model chain, request sent to Gemini), every flag rule incl. edges, alerts, Gemini explanation and caching, handoff |
 | `tests/test_toyota.py` | Toyota tests: loader vs raw CSVs, all 20 golden best-moves reachable, guardrails (vulnerable, missed payments, no marketing consent), trade-in rules, lease handling, fallback text |
 | `tests/test_api.py` | API tests: onboard, health, 404s, persistence, chat fallbacks, and a full Gemini function-calling loop against a fake local Gemini server |
 | `tests/test_wellness.py`, `tests/test_fallbacks.py` | Vendored PNC math tests; canned-answer fallback tests |
@@ -145,6 +155,35 @@ curl http://localhost:8000/health/C002
 # {"user_id":"C002","name":"Maya","data_source":"pnc_mock","indicators":[{"id":"savings_rate","label":"Savings rate","value":0.1859,"status":"ok","explanation":"You keep 19% of income after expenses and debt payments; aim for 20% or more."}, ...]}
 ```
 Thresholds are PNC's: savings rate good >= 20%, ok >= 10%; debt-to-income good <= 20%, ok <= 36%; emergency fund good >= 6 months, ok >= 3; credit utilization good <= 10%, ok <= 30%. PNC's `watch` label is shown as `ok`.
+
+### `POST /speak`
+Body `{"text": str, "voice": str | null}` (voice default `Kore`). Always HTTP 200.
+```bash
+curl -s -X POST localhost:8000/speak -H 'Content-Type: application/json' -d '{"text":"Hi Maya, you are on track."}'
+# {"audio_base64":"UklGRi...","mime_type":"audio/wav","source":"gemini_tts:gemini-2.5-flash-preview-tts","text":"Hi Maya, you are on track."}
+# fallback: {"audio_base64":null,"mime_type":null,"source":"browser_speech","text":"...","reason":"Gemini TTS unavailable"}
+```
+
+### `POST /transactions`
+Body `{"user_id", "amount", "merchant", "category"?, "country"? (default US), "timestamp"? (ISO, default now)}`. Returns `flagged`, `flags[{id,detail}]`, `severity` (`none/low/medium/high`) and `alert_id` when flagged. If you omit `timestamp` the server's clock is used, so a purchase sent between midnight and 5 AM local time gets an `odd_hour` flag; always send a midday `timestamp` for predictable demos. Unknown user 404; bad timestamp or amount <= 0 is 422.
+```bash
+curl -s -X POST localhost:8000/transactions -H 'Content-Type: application/json' \
+  -d '{"user_id":"C002","amount":1300,"merchant":"Chipotle","category":"dining","timestamp":"2026-11-07T12:30:00"}'
+curl -s -X POST localhost:8000/transactions -H 'Content-Type: application/json' \
+  -d '{"user_id":"C002","amount":40,"merchant":"Crypto Exchange Ltd","category":"shopping","country":"RO","timestamp":"2026-11-07T03:12:00"}'
+```
+
+### `GET /alerts/{user_id}`
+Flagged transactions, newest first. Each has `transaction`, `flags`, `severity`, `explanation`, `explanation_source` (`gemini` / `fallback`). `?explain=false` skips Gemini. Gemini explains only the 5 newest (the rest use the fixed text), and a Gemini explanation is cached on the alert.
+```bash
+curl -s localhost:8000/alerts/C002
+```
+
+### `POST /handoff`
+Body `{"user_id", "reason"?, "conversation"? [recent chat lines]}`. Returns `who`, `what`, `why[]`, `next_step`, `open_alerts` and a ready-to-paste `summary`. Toyota customers: contract, missed payments, and the guardrail reasons (vulnerable, missed payments) plus preferred contact channel. PNC/form customers: health indicators (at-risk ones listed under why).
+```bash
+curl -s -X POST localhost:8000/handoff -H 'Content-Type: application/json' -d '{"user_id":"TY-C014"}'
+```
 
 ### `GET /next-move/{user_id}`
 Toyota customers only (`TY-C001`..`TY-C020`; others return HTTP 400). Returns `customer`, `vehicle`, `account`, `situation`, `guardrails` (`upsell_allowed`, `new_vehicle_offers_allowed`, `must_offer_human`, `human_specialist_available`, `rules_applied`), `options` (each with `option_id`, `status`, `next_step_type`, `summary`, `assumption`, `tradeoff`) and `not_eligible` (with the reason).
@@ -203,6 +242,9 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 | Function | Kind |
 |---|---|
 | `finance.can_afford`, `retirement_check`, `spending_breakdown`, `forecast_balances`, `what_if`, `trade_in_equity`, `trade_in_check`, `generate_budget`, `health_indicators`, `monthly_debt_payments` | Deterministic Python (no randomness, no LLM) |
+| `fraud.*` (flag rules, z-score, severity), `handoff.build`, `voice.pcm_to_wav` / `clean_for_speech` | Deterministic Python |
+| `fraud.explain_alert` -> `llm.run_chain` | **LLM call (no tools)**: rewrites the already-computed flags into 2-3 plain sentences; falls back to fixed text |
+| `voice.speak` | **Gemini TTS call**: text to audio only; no decisions |
 | `mockdata.*`, `toyota.*` (options, guardrails, trade-in check, fallback text) | Deterministic Python (reads CSV/JSON files) |
 | `wellness.metrics.compute_metrics`, `wellness.forecast.forecast_cash` | Deterministic Python (PNC) |
 | `llm.with_disclaimer`, `store.*`, `demo_fallbacks.lookup` | Deterministic Python |
@@ -230,7 +272,15 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
   - Retirement: needed balance = desired yearly income / yearly return (live on returns, keep principal). It is nominal dollars: no inflation, taxes or Social Security (the dataset has none either).
 - **Income/expenses for mock customers** are their 12-month average from the ledger (paychecks; expense transactions), not the single snapshot number in `profiles.csv`. They differ by under 5% (tested). Debt payments are the *scheduled* payments in `accounts.csv`; PNC notes actual historical payments can differ.
 - 10 of the 30 mock customers have scheduled debt payments larger than their leftover income, so their budget shows `over_budget:true`. That is what the data says.
-- PNC's data has no merchants or locations (descriptions are just "Purchase", "Payment"), so Phase 3 fraud rules on "new merchant" or "foreign" will need mock merchant fields added.
+- **Phase 3 notes:**
+  - PNC's data has no merchants, countries or times, so `mock/merchants.json` (typical merchants per category) is invented. A user's known merchants = those mock merchants for categories they spend in + merchants from their earlier unflagged transactions. Form/Toyota users start with none, so `new_merchant` is skipped until Flux has seen one clean transaction.
+  - Large amount: compared with the user's own history of purchases in that category (PNC ledger, 24 purchases): flagged when at least 1.5x the average AND z-score at least 3. With no history it is a fixed $500 limit. These cut-offs are policy numbers we chose (`app/fraud.py`).
+  - PNC's ledger holds one lump purchase per category per month, so a "usual purchase" is about $200, much bigger than a coffee. Demo with amounts like 1300.
+  - Odd hour = 12:00 AM to 4:59 AM, in the timestamp as sent. Foreign = country other than US. Severity score: large amount 2, foreign 2, new merchant 1, odd hour 1 -> 1 low, 2 medium, 3+ high.
+  - Alerts and learned merchants live in memory only (lost on restart). No alert status or "this was me" confirmation.
+  - A flagged merchant is not learned, so the same new merchant keeps flagging until a clean transaction from it exists.
+  - `/handoff` creates no ticket and sends nothing; it only builds the summary.
+- **`/speak` is not verified against the real Gemini TTS service** (no key here). The request/response handling is tested through the real SDK against a fake server. TTS model names are configurable (`GEMINI_TTS_MODEL`, `GEMINI_TTS_MODEL_FALLBACKS`); if neither works for your key, `/speak` returns the browser-speech fallback instead of an error, and the uvicorn log shows `flux.voice` warnings with the real reason. The voice, "Kore", is a default; change with `GEMINI_TTS_VOICE`.
 - Storage is in memory plus a JSON file (`data/users.json`, git-ignored). No auth: anyone with a `user_id` can read that profile. One process only.
 - No conversation memory: each `/chat` call is independent.
 - `gemini-3.8-flash` can be slow or return 503. `/chat` retries once, then tries `gemini-3.5-flash-lite`, then `gemini-3.1-flash-lite`, then falls back to canned text (education) or a health snapshot (coach).
@@ -245,7 +295,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 # paste GEMINI_API_KEY into .env
 source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000     # interactive docs: http://localhost:8000/docs
-python -m pytest -q              # 117 tests, no API key needed
+python -m pytest -q              # 145 tests, no API key needed
 ```
 Use a second terminal for curl. After editing `.env`, restart uvicorn.
 
@@ -261,6 +311,9 @@ Use a second terminal for curl. After editing `.env`, restart uvicorn.
 | `/chat` with `user_id` says `"source":"fallback_health"` | Gemini failed on every model. Read the `flux.llm` warnings in the uvicorn terminal (bad key, quota, model name, 503) |
 | `"source":"gemini:gemini-3.5-flash-lite"` | The primary model was busy; the backup answered. Fine |
 | `"tools_used":[]` on a personal question | Gemini answered without calling a tool. Ask again, or be more specific ("can I afford $300?") |
+| `/speak` returns `"source":"browser_speech"` | No key, or the TTS models are unavailable for your key. Read the `flux.voice` warnings in the uvicorn terminal; set `GEMINI_TTS_MODEL` to a TTS model your key can use |
+| `/alerts` explanation says `"explanation_source":"fallback"` | Gemini was busy or unavailable; the fixed text is still correct. Retry later |
+| Transaction not flagged when you expected it | Check the amount vs the user's usual (C002 dining ~$204.50), that the merchant is not a known one (e.g. Chipotle), and that the hour is 0-4 for odd-hour |
 | 400 on `/health/TY-...` or `/next-move/C0xx` | `/health` is for PNC customers, `/next-move` is for Toyota customers (`TY-C001`..`TY-C020`) |
 | 404 `Unknown user_id` | Use `C001`..`C030` or `TY-C001`..`TY-C020` (see `/demo-users`), or an id from `/onboard`. Onboarded ids are lost if `data/users.json` is deleted |
 | Agent says it needs `current_savings` etc. | Working as intended for users without records: the tool refuses to guess. Give the values in the chat, or use a demo customer |
