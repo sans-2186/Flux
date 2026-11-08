@@ -166,21 +166,22 @@ def test_speak_discovers_a_working_tts_model_when_configured_ones_are_unavailabl
     assert "new-tts" in paths[-1] and "old-tts" not in paths[-1]
 
 
-def test_speak_audio_endpoint_returns_a_wav_file(monkeypatch):
+def test_speak_audio_endpoint_returns_a_wav_file_even_when_client_accepts_json(monkeypatch):
     fake = FakeServer(strict_tts).connect(monkeypatch)
     try:
-        r = client.post("/speak/audio", json={"text": "hi"})
+        r = client.post("/speak/audio", json={"text": "hi"}, headers={"Accept": "application/json"})
     finally:
         fake.close()
     assert r.status_code == 200 and r.headers["content-type"] == "audio/wav"
     assert r.headers["x-flux-source"].startswith("gemini_tts:")
+    assert 'filename="flux-voice.wav"' in r.headers["content-disposition"]
     with wave.open(io.BytesIO(r.content)) as w:
         assert w.getnframes() == 480
 
 
-def test_speak_audio_endpoint_falls_back_to_json_without_a_key():
+def test_speak_audio_endpoint_says_why_when_tts_is_unavailable():
     r = client.post("/speak/audio", json={"text": "hi"})
-    assert r.status_code == 200 and r.json()["source"] == "browser_speech"
+    assert r.status_code == 503 and r.json()["detail"]["reason"] == "no GEMINI_API_KEY configured"
 
 
 def test_speak_demo_page_is_served():

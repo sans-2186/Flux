@@ -222,15 +222,17 @@ def handoff_summary(req: HandoffRequest = Body(openapi_examples=HANDOFF_EXAMPLES
     return handoff.build(_user_or_404(req.user_id), req.reason, req.conversation)
 
 
-@app.post("/speak/audio", responses={200: {"content": {"audio/wav": {}}}})
+@app.post("/speak/audio", response_class=Response, responses={200: {"content": {"audio/wav": {}}}})
 def speak_audio(req: SpeakRequest = Body(openapi_examples=SPEAK_EXAMPLES)):
-    """Same as /speak but returns the audio file itself (audio/wav) so a browser or Swagger can play or
-    download it. If TTS is unavailable the response is the same JSON as /speak (source "browser_speech")."""
+    """Same as /speak but the response IS the audio file (audio/wav, saved as flux-voice.wav). If Gemini TTS
+    is unavailable this returns HTTP 503 with the reason (use /speak for the browser-speech fallback)."""
     result = voice.speak(req.text, req.voice)
     if not result["audio_base64"]:
-        return result
+        raise HTTPException(status_code=503, detail={"reason": result.get("reason"), "errors": result.get("errors"),
+                                                     "tried_models": result.get("tried_models")})
     return Response(content=base64.b64decode(result["audio_base64"]), media_type="audio/wav",
-                    headers={"X-Flux-Source": result["source"]})
+                    headers={"X-Flux-Source": result["source"],
+                             "Content-Disposition": 'attachment; filename="flux-voice.wav"'})
 
 
 @app.get("/speak-demo", response_class=HTMLResponse, include_in_schema=False)
