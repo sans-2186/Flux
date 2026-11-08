@@ -40,12 +40,19 @@ def pcm_to_wav(pcm: bytes, rate: int = DEFAULT_RATE) -> bytes:
     return buf.getvalue()
 
 
+def _beta_options():
+    """The SDK defaults to the stable v1 API, which has no speechConfig; TTS needs v1beta."""
+    from google.genai import types
+    return types.HttpOptions(api_version="v1beta")
+
+
 def _tts_once(client, model: str, text: str, voice: str):
     from google.genai import types
     resp = client.models.generate_content(
         model=model,
         contents=text,
         config=types.GenerateContentConfig(
+            http_options=_beta_options(),
             response_modalities=["AUDIO"],
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
@@ -80,7 +87,7 @@ def _attempt(client, model: str, spoken: str, voice: str, errors: list):
 def _discover_tts_models(client, tried: list) -> list:
     """Ask the API which TTS models this key can use (names containing 'tts')."""
     try:
-        names = [m.name.removeprefix("models/") for m in client.models.list() if "tts" in (m.name or "").lower()]
+        names = [m.name.removeprefix("models/") for m in client.models.list(config={"http_options": _beta_options()}) if "tts" in (m.name or "").lower()]
     except Exception as e:
         log.warning("Could not list Gemini models: %s", e)
         return []

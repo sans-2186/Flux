@@ -285,6 +285,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
   - Alerts and learned merchants live in memory only (lost on restart). No alert status or "this was me" confirmation.
   - A flagged merchant is not learned, so the same new merchant keeps flagging until a clean transaction from it exists.
   - `/handoff` creates no ticket and sends nothing; it only builds the summary.
+- **TTS needs the `v1beta` API.** The SDK defaults to `v1`, where Gemini rejects `speechConfig` ("Unknown name speechConfig at generation_config", found with a real key). `app/voice.py` sets `api_version="v1beta"` on the TTS calls and on the model lookup only; chat still uses the SDK default. The tests' fake server now rejects `speechConfig` on `/v1/` like the real API.
 - **`/speak` is not verified against the real Gemini TTS service** (no key here). The request/response handling is tested through the real SDK against a fake server. TTS model names are configurable (`GEMINI_TTS_MODEL`, `GEMINI_TTS_MODEL_FALLBACKS`); if neither works for your key, `/speak` returns the browser-speech fallback instead of an error, and the uvicorn log shows `flux.voice` warnings with the real reason. The voice, "Kore", is a default; change with `GEMINI_TTS_VOICE`.
 - Storage is in memory plus a JSON file (`data/users.json`, git-ignored). No auth: anyone with a `user_id` can read that profile. One process only.
 - No conversation memory: each `/chat` call is independent.

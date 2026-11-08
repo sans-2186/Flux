@@ -87,6 +87,14 @@ def audio_reply(pcm=b"\x01\x00" * 480, mime="audio/L16;codec=pcm;rate=24000"):
 
 # ---------- voice ----------
 
+def strict_tts(path, body):
+    """Like the real API: speechConfig exists on v1beta only (v1 answers 400, as seen with a real key)."""
+    if path.startswith("/v1/") and "speechConfig" in body.get("generationConfig", {}):
+        return 400, {"error": {"code": 400, "status": "INVALID_ARGUMENT",
+                               "message": 'Unknown name "speechConfig" at generation_config: Cannot find field.'}}
+    return audio_reply()
+
+
 def test_clean_for_speech_strips_markdown():
     assert voice.clean_for_speech("**Hi** there,\n\n# you `owe` $5") == "Hi there, you owe $5"
 
@@ -105,7 +113,7 @@ def test_speak_without_key_returns_browser_fallback_with_200():
 
 
 def test_speak_returns_playable_wav_from_gemini_tts(monkeypatch):
-    fake = FakeServer(lambda path, body: audio_reply()).connect(monkeypatch)
+    fake = FakeServer(strict_tts).connect(monkeypatch)
     try:
         body = client.post("/speak", json={"text": "Hi **Maya**", "voice": "Puck"}).json()
         path, sent = fake.requests[0]
@@ -114,7 +122,7 @@ def test_speak_returns_playable_wav_from_gemini_tts(monkeypatch):
     assert body["source"] == f"gemini_tts:{voice.TTS_MODEL}" and body["mime_type"] == "audio/wav"
     with wave.open(io.BytesIO(base64.b64decode(body["audio_base64"]))) as w:
         assert w.getframerate() == 24000 and w.getnframes() == 480
-    assert voice.TTS_MODEL in path
+    assert path.startswith("/v1beta/") and voice.TTS_MODEL in path
     assert sent["generationConfig"]["responseModalities"] == ["AUDIO"]
     assert sent["generationConfig"]["speechConfig"] == {"voice_config": {"prebuilt_voice_config": {"voice_name": "Puck"}}}
     assert sent["contents"][0]["parts"][0]["text"] == "Hi Maya"
@@ -123,7 +131,7 @@ def test_speak_returns_playable_wav_from_gemini_tts(monkeypatch):
 def test_speak_uses_backup_tts_model_when_primary_fails(monkeypatch):
     monkeypatch.setattr(voice, "TTS_CHAIN", ["primary-tts", "backup-tts"])
     fake = FakeServer(lambda path, body: (404, {"error": {"code": 404, "message": "model not found", "status": "NOT_FOUND"}})
-                      if "primary-tts" in path else audio_reply()).connect(monkeypatch)
+                      if "primary-tts" in path else strict_tts(path, body)).connect(monkeypatch)
     try:
         body = client.post("/speak", json={"text": "hi"}).json()
     finally:
@@ -146,7 +154,7 @@ def test_speak_falls_back_to_browser_when_every_tts_model_fails(monkeypatch):
 def test_speak_discovers_a_working_tts_model_when_configured_ones_are_unavailable(monkeypatch):
     monkeypatch.setattr(voice, "TTS_CHAIN", ["old-tts"])
     fake = FakeServer(lambda path, body: (404, {"error": {"code": 404, "message": "not found", "status": "NOT_FOUND"}})
-                      if "old-tts" in path else audio_reply(), models=["gemini-x-flash", "new-tts", "old-tts"]).connect(monkeypatch)
+                      if "old-tts" in path else strict_tts(path, body), models=["gemini-x-flash", "new-tts", "old-tts"]).connect(monkeypatch)
     try:
         first = client.post("/speak", json={"text": "hi"}).json()
         second = client.post("/speak", json={"text": "hi again"}).json()
@@ -159,7 +167,7 @@ def test_speak_discovers_a_working_tts_model_when_configured_ones_are_unavailabl
 
 
 def test_speak_audio_endpoint_returns_a_wav_file(monkeypatch):
-    fake = FakeServer(lambda path, body: audio_reply()).connect(monkeypatch)
+    fake = FakeServer(strict_tts).connect(monkeypatch)
     try:
         r = client.post("/speak/audio", json={"text": "hi"})
     finally:
