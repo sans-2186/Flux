@@ -15,12 +15,12 @@ _users = None
 
 
 def _rows(name):
-    with open(DIR / "pnc" / name, newline="") as f:
+    with open(DIR / "pnc" / name, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
 def _build():
-    people = json.loads((DIR / "people.json").read_text())["people"]
+    people = json.loads((DIR / "people.json").read_text(encoding="utf-8"))["people"]
     profiles = {p["customer_id"]: p for p in _rows("profiles.csv")}
     accounts = defaultdict(list)
     for a in _rows("accounts.csv"):

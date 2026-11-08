@@ -31,7 +31,7 @@ def add_user(record):
     users[record["user_id"]] = record
     p = _path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(users, indent=2))
+    p.write_text(json.dumps(users, indent=2), encoding="utf-8")
     return record["user_id"]
 
 

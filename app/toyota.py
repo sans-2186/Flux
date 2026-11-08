@@ -32,7 +32,7 @@ def _num(s):
 
 
 def _rows(name):
-    with open(DIR / name, newline="") as f:
+    with open(DIR / name, newline="", encoding="utf-8") as f:
         return [{k: _num(v) for k, v in row.items()} for row in csv.DictReader(f)]
 
 

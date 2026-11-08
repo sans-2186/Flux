@@ -50,7 +50,7 @@ def _history():
     global _history_cache
     if _history_cache is None:
         hist = defaultdict(lambda: defaultdict(list))
-        with open(MOCK / "pnc" / "transactions.csv", newline="") as f:
+        with open(MOCK / "pnc" / "transactions.csv", newline="", encoding="utf-8") as f:
             for t in csv.DictReader(f):
                 if t["flow_class"] == "expense" and t["transaction_type"] == "purchase":
                     amt = float(t["amount"])
@@ -62,7 +62,7 @@ def _history():
 
 def _seed_merchants(user_id: str) -> set:
     cats = _history().get(user_id, {})
-    merchants = json.loads((MOCK / "merchants.json").read_text())
+    merchants = json.loads((MOCK / "merchants.json").read_text(encoding="utf-8"))
     return {m.lower() for c, names in merchants.items() if c in cats for m in names}
 
 
