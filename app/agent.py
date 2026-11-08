@@ -70,14 +70,16 @@ def make_tools(user: dict, trace: list):
     # Parameters are plain `float = None`, not Optional[float]: the SDK rejects whole numbers
     # (e.g. 90000) for Optional[float] but accepts them for float.
     def retirement_check(target_age: float, annual_income: float = None, current_savings: float = None,
-                         monthly_contribution: float = None, annual_return_pct: float = None) -> dict:
+                         monthly_contribution: float = None, annual_return_pct: float = None,
+                         current_age: float = None) -> dict:
         """Check if the user can retire at target_age. annual_income is the YEARLY INCOME THEY WANT
         IN RETIREMENT in dollars (for 'retire at 50 on 90k' use 90000). The other values default to
-        the user's records; only pass them if the user stated them. If the result has
+        the user's records; only pass them if the user stated them (current_age too). If the result has
         missing_inputs, ask the user for those values instead of guessing."""
         trace.append("retirement_check")
         return finance.retirement_check(user, int(target_age), annual_income, current_savings,
-                                        monthly_contribution, annual_return_pct)
+                                        monthly_contribution, annual_return_pct,
+                                        None if current_age is None else int(current_age))
 
     def spending_breakdown(months: float = 3) -> dict:
         """Average monthly spending by category over the last N months from the user's real

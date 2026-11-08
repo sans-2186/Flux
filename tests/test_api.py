@@ -59,6 +59,18 @@ def test_onboard_persists_to_json_file(tmp_path):
     assert saved[uid]["name"] == "Sam"
 
 
+def test_onboard_without_age_works_and_retirement_asks_for_it():
+    body = {k: v for k, v in PROFILE.items() if k != "age"}
+    r = client.post("/onboard", json=body)
+    assert r.status_code == 200
+    user = store.get_user(r.json()["user_id"])
+    assert user["age"] is None
+    from app import finance
+    out = finance.retirement_check(user, 65, 40000, 1000, 100, 5)
+    assert out["missing_inputs"] == ["current_age (how old you are now)"]
+    assert client.post("/onboard", json={**PROFILE, "age": 5}).status_code == 422
+
+
 def test_onboard_validation():
     assert client.post("/onboard", json={**PROFILE, "monthly_income": 0}).status_code == 422
     assert client.post("/onboard", json={"name": "x"}).status_code == 422

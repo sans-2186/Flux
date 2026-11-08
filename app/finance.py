@@ -144,7 +144,7 @@ def can_afford(user, price):
 
 
 def retirement_check(user, target_age, annual_income=None, current_savings=None,
-                     monthly_contribution=None, annual_return_pct=None):
+                     monthly_contribution=None, annual_return_pct=None, current_age=None):
     """Will the retirement account reach the amount needed by target_age?
 
     No hidden assumptions. Each input is either given by the user or read from their records;
@@ -153,18 +153,21 @@ def retirement_check(user, target_age, annual_income=None, current_savings=None,
       current_savings      retirement balance (default: the IRA balance on record)
       monthly_contribution what they actually put in each month (default: IRA deposits on record)
       annual_return_pct    yearly return (default: the IRA's recorded yield)
+      current_age          how old they are now (default: the age on record; some users have none)
     Needed balance = desired income / yearly return, i.e. living on returns without spending
     principal. Growth compounds monthly. Nominal dollars: no inflation, taxes or Social Security.
     """
     rec = user.get("retirement") or {}
     given = {"annual_income": annual_income, "current_savings": current_savings,
-             "monthly_contribution": monthly_contribution, "annual_return_pct": annual_return_pct}
-    records = {"current_savings": rec.get("balance"), "monthly_contribution": rec.get("monthly_contribution"),
+             "monthly_contribution": monthly_contribution, "annual_return_pct": annual_return_pct,
+             "current_age": current_age}
+    records = {"current_age": user.get("age"), "current_savings": rec.get("balance"), "monthly_contribution": rec.get("monthly_contribution"),
                "annual_return_pct": rec.get("annual_return_pct")}
     labels = {"annual_income": "annual_income (the yearly income you want in retirement)",
               "current_savings": "current_savings (what you have saved for retirement)",
               "monthly_contribution": "monthly_contribution (what you put in each month)",
-              "annual_return_pct": "annual_return_pct (expected yearly return in percent)"}
+              "annual_return_pct": "annual_return_pct (expected yearly return in percent)",
+              "current_age": "current_age (how old you are now)"}
     used, inputs, missing = {}, {}, []
     for key in labels:
         if given[key] is not None:
@@ -179,7 +182,7 @@ def retirement_check(user, target_age, annual_income=None, current_savings=None,
     if used["annual_return_pct"] <= 0:
         return {"error": "annual_return_pct must be above 0 to size the target balance."}
 
-    years = max(target_age - user["age"], 0)
+    years = max(target_age - used["current_age"], 0)
     n = years * 12
     rm = used["annual_return_pct"] / 100 / 12
     growth = (1 + rm) ** n
@@ -188,7 +191,7 @@ def retirement_check(user, target_age, annual_income=None, current_savings=None,
     needed = used["annual_income"] / (used["annual_return_pct"] / 100)
     gap = max(needed - used["current_savings"] * growth, 0)
     return {
-        "on_track": projected >= needed, "target_age": target_age, "current_age": user["age"],
+        "on_track": projected >= needed, "target_age": target_age, "current_age": used["current_age"],
         "years_to_go": years, "desired_annual_income": _r(used["annual_income"]),
         "projected_balance": _r(projected), "needed_balance": _r(needed),
         "shortfall": _r(max(needed - projected, 0)),

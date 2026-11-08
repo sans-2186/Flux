@@ -87,6 +87,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 |---|---|
 | `app/main.py` | FastAPI app and endpoints: `GET /`, `GET /demo-users`, `POST /onboard`, `GET /health/{id}`, `GET /next-move/{id}`, `POST /chat`; CORS open |
 | `app/voice.py` | `/speak`: Gemini TTS (16-bit 24 kHz PCM wrapped into WAV), model fallback chain, browser-speech fallback; strips markdown before speaking |
+| `frontend-integration/` | For the UI repo (https://github.com/Cindiya/Flux_UI): `flux-backend.ts` (client for `/onboard`, `/chat`, `/speak`), `flux-ui.patch` (wires it into the UI's chat; applies cleanly to Flux_UI@32f2cec), `README.md` (steps and profile mapping) |
 | `app/speak_demo.html` | One-page voice test served at `/speak-demo`: text box, voice picker, Speak button; plays Gemini audio or the browser's voice |
 | `app/fraud.py` | Phase 3: transaction flag rules (large amount, new merchant, foreign, odd hour), severity, alert store, Gemini plain-language explanation with fixed-text fallback |
 | `app/handoff.py` | Phase 3: who/what/why/next-step summary for a human agent (plain Python, no LLM) |
@@ -149,8 +150,8 @@ curl http://localhost:8000/demo-users
 ```
 
 ### `POST /onboard`
-Optional: create your own user from typed-in numbers. Body: `name, age, monthly_income, monthly_expenses, savings, debts[{name,balance,monthly_payment}], credit_card_balance, credit_limit, credit_card_payment, goals[], vehicle?{make,model,year,value,loan_balance,monthly_payment}`. `monthly_expenses` excludes debt payments; `credit_card_payment` is what they actually pay on the card (0 if omitted; Flux does not guess a minimum). Returns `user_id`, `data_source:"form"`, a budget and the 4 health indicators. Budget = their expenses line + scheduled debt payments + savings (whatever income is left); if nothing is left, `over_budget:true` and `shortfall` shows the gap. Validation errors return HTTP 422.
-These users have no transaction history or retirement account on record, so `retirement_check` and `spending_breakdown` ask for the missing information.
+Optional: create your own user from typed-in numbers. Body: `name, age (optional), monthly_income, monthly_expenses, savings, debts[{name,balance,monthly_payment}], credit_card_balance, credit_limit, credit_card_payment, goals[], vehicle?{make,model,year,value,loan_balance,monthly_payment}`. `monthly_expenses` excludes debt payments; `credit_card_payment` is what they actually pay on the card (0 if omitted; Flux does not guess a minimum). Returns `user_id`, `data_source:"form"`, a budget and the 4 health indicators. Budget = their expenses line + scheduled debt payments + savings (whatever income is left); if nothing is left, `over_budget:true` and `shortfall` shows the gap. Validation errors return HTTP 422.
+These users have no transaction history or retirement account on record, so `retirement_check` and `spending_breakdown` ask for the missing information. That includes age: if none was given, `retirement_check` asks for `current_age`.
 
 ### `GET /health/{user_id}`
 ```bash
@@ -242,6 +243,9 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 3. The system prompt forbids inventing or assuming numbers, and tells the agent to ask the user when a tool reports `missing_inputs`.
 4. Tests in `tests/test_mockdata.py` re-read the raw CSVs and check the loader and tools against them.
 
+### Connecting the UI
+The teammate's Next.js UI (https://github.com/Cindiya/Flux_UI) had a hard-coded chat. `frontend-integration/` connects it: chat questions go to `/onboard` (once) + `/chat`, replies can be read aloud with `/speak`, and the UI falls back to its own local answer if the backend is down. Checked here: the patch applies cleanly, the UI type-checks with 0 errors, and the client module was run with Node against a live backend (onboard mapping, chat, stale-user retry, voice paths, backend-down). Not checked: running the full UI in a browser (the UI needs Node 24.22.1+ and its own Payload setup; this machine has Node 22). See `frontend-integration/README.md`.
+
 ## 4. Deterministic tools vs LLM calls
 
 | Function | Kind |
@@ -301,7 +305,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 # paste GEMINI_API_KEY into .env
 source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000     # interactive docs: http://localhost:8000/docs
-python -m pytest -q              # 149 tests, no API key needed
+python -m pytest -q              # 152 tests, no API key needed
 ```
 Use a second terminal for curl. After editing `.env`, restart uvicorn.
 

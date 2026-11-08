@@ -1,0 +1,317 @@
+diff --git a/src/app/(frontend)/FluxApp.tsx b/src/app/(frontend)/FluxApp.tsx
+index 5aefa05..65a218b 100644
+--- a/src/app/(frontend)/FluxApp.tsx
++++ b/src/app/(frontend)/FluxApp.tsx
+@@ -18,6 +18,7 @@ import {
+   type ScenarioResult,
+   type OnboardingStep,
+ } from './flux-api-client'
++import { askCoach, speakReply, stopSpeaking } from './flux-backend'
+ 
+ const fluxLogo = '/flux-logo.png'
+ 
+@@ -509,7 +510,7 @@ function App() {
+   const [scenarioError, setScenarioError] = useState('')
+   const [hasLoadedApi, setHasLoadedApi] = useState(false)
+   const [savedScenarios, setSavedScenarios] = useState<SimulatorData[]>([])
+-  const [chat, setChat] = useState<{ from: 'ai' | 'user'; text: string }[]>([])
++  const [chat, setChat] = useState<{ id?: number; from: 'ai' | 'user'; text: string; pending?: boolean }[]>([])
+   const [chatInput, setChatInput] = useState('')
+   const [isListening, setIsListening] = useState(false)
+   const [voiceMessage, setVoiceMessage] = useState('')
+@@ -525,6 +526,8 @@ function App() {
+   const [recognizedPrice, setRecognizedPrice] = useState(21500)
+   const [extensionChoice, setExtensionChoice] = useState('Buy this car now')
+   const profileTouchedRef = useRef(false)
++  const chatIdRef = useRef(0)
++  const lastInputWasVoiceRef = useRef(false)
+   const recognitionRef = useRef<{
+     start: () => void
+     stop: () => void
+@@ -909,7 +912,7 @@ function App() {
+     }
+   }
+ 
+-  const sendPrompt = (prompt: string) => {
++  const localReply = (prompt: string) => {
+     const normalized = prompt.toLowerCase()
+     let response = `Using the example profile—not bank-connected data—I calculated ${money(finance.income)} income minus ${money(finance.housing)} housing, ${money(finance.expenses)} other expenses, and ${money(finance.debt)} existing debt payments. That leaves an estimated ${money(cashFlow)} before a car. I would review the full monthly car cost and the assumptions before considering any next step.`
+     if (normalized.includes('other cost'))
+@@ -922,7 +925,30 @@ function App() {
+       response = `If you wait three months and continue setting aside about ${money(contribution)} per month, you could add roughly ${money(contribution * 3)} to your down payment. With the same car and loan assumptions, that would lower the amount borrowed and leave about ${money(cashFlow - loanDetails({ ...sim, down: sim.down + contribution * 3 }).totalMonthly)} of estimated monthly room after the full car cost. The tradeoff is waiting longer for reliable transportation.`
+     if (normalized.includes('afford'))
+       response = `Your current scenario is about ${money(details.totalMonthly)} per month including the estimated payment, insurance, fuel, and maintenance. That is about ${Math.round((details.totalMonthly / finance.income) * 100)}% of your take-home income. Rather than calling that affordable or not, we can compare it with the ${money(cashFlow)} you currently have after estimated core expenses.`
+-    setChat((c) => [...c, { from: 'user', text: prompt }, { from: 'ai', text: response }])
++    return response
++  }
++  // Facts from the screen the user is looking at; sent with the question so the coach can use them.
++  const screenContext = () =>
++    `(The user is looking at a car scenario in the app: price ${money(sim.price)}, down payment ${money(sim.down)}, ${sim.term} months at ${sim.apr}% APR.)`
++  const sendPrompt = async (prompt: string) => {
++    stopSpeaking()
++    const viaVoice = lastInputWasVoiceRef.current
++    lastInputWasVoiceRef.current = false
++    const id = ++chatIdRef.current
++    setChat((c) => [
++      ...c,
++      { from: 'user', text: prompt },
++      { id, from: 'ai', text: 'Flux is thinking…', pending: true },
++    ])
++    let text: string
++    try {
++      const answer = await askCoach(`${prompt}\n\n${screenContext()}`, finance, snapshot, authUser?.fullName)
++      text = answer.reply
++    } catch {
++      text = localReply(prompt)
++    }
++    setChat((c) => c.map((m) => (m.id === id ? { from: 'ai', text } : m)))
++    if (viaVoice) void speakReply(text)
+   }
+   const submitChat = (e: FormEvent) => {
+     e.preventDefault()
+@@ -980,6 +1006,7 @@ function App() {
+         .join(' ')
+         .trim()
+       setChatInput([startingText, transcript].filter(Boolean).join(' '))
++      if (transcript) lastInputWasVoiceRef.current = true
+       setVoiceMessage('Listening… Speak naturally, then review your message.')
+     }
+     recognition.onerror = (event) => {
+@@ -1858,8 +1885,18 @@ function App() {
+           </div>
+           {chat.map((message, i) => (
+             <div key={i} className={`chat-row ${message.from}`}>
+-              <div className="bubble">
++              <div className={`bubble${message.pending ? ' pending' : ''}`}>
+                 <p>{message.text}</p>
++                {message.from === 'ai' && !message.pending && (
++                  <button
++                    type="button"
++                    className="listen-button"
++                    aria-label="Listen to this reply"
++                    onClick={() => void speakReply(message.text)}
++                  >
++                    Listen
++                  </button>
++                )}
+               </div>
+             </div>
+           ))}
+@@ -1877,7 +1914,10 @@ function App() {
+         <form className="chat-input" onSubmit={submitChat}>
+           <input
+             value={chatInput}
+-            onChange={(e) => setChatInput(e.target.value)}
++            onChange={(e) => {
++              lastInputWasVoiceRef.current = false
++              setChatInput(e.target.value)
++            }}
+             placeholder="Ask Flux anything about your goal..."
+             aria-label="Message Flux AI"
+           />
+diff --git a/src/app/(frontend)/flux-backend.ts b/src/app/(frontend)/flux-backend.ts
+new file mode 100644
+index 0000000..50f948b
+--- /dev/null
++++ b/src/app/(frontend)/flux-backend.ts
+@@ -0,0 +1,171 @@
++import type { FinancialProfile, FinancialSnapshot } from './flux-api-client'
++
++// Flux Python backend (FastAPI). Run it with: uvicorn app.main:app --port 8000
++// Override in .env.local:  NEXT_PUBLIC_FLUX_BACKEND_URL=http://localhost:8000
++const BASE = (process.env.NEXT_PUBLIC_FLUX_BACKEND_URL || 'http://localhost:8000').replace(/\/+$/, '')
++// Optional: skip onboarding and always use one backend demo customer (C001..C030, TY-C001..TY-C020).
++const FIXED_USER = process.env.NEXT_PUBLIC_FLUX_USER_ID || ''
++const STORAGE_KEY = 'flux-backend-user'
++
++export type CoachReply = { reply: string; source: string; toolsUsed: string[] }
++
++type ChatResponse = { reply: string; mode: string; source: string; tools_used: string[] }
++type SpeakResponse = {
++  audio_base64: string | null
++  mime_type: string | null
++  source: string
++  text: string
++}
++type OnboardResponse = { user_id: string }
++
++class BackendError extends Error {
++  constructor(
++    message: string,
++    readonly status: number,
++  ) {
++    super(message)
++    this.name = 'BackendError'
++  }
++}
++
++async function post<T>(path: string, body: unknown, timeoutMs: number): Promise<T> {
++  const controller = new AbortController()
++  const timer = setTimeout(() => controller.abort(), timeoutMs)
++  try {
++    const response = await fetch(`${BASE}${path}`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(body),
++      signal: controller.signal,
++    })
++    if (!response.ok) {
++      let detail = ''
++      try {
++        const payload = (await response.json()) as { detail?: unknown }
++        detail = typeof payload.detail === 'string' ? payload.detail : JSON.stringify(payload.detail)
++      } catch {
++        // keep the status-only message
++      }
++      throw new BackendError(`Flux backend ${response.status}. ${detail}`.trim(), response.status)
++    }
++    return (await response.json()) as T
++  } finally {
++    clearTimeout(timer)
++  }
++}
++
++// The UI profile -> the backend's POST /onboard body. The UI collects no age, so none is sent;
++// the backend asks the user for it if a question needs it (retirement).
++export function onboardBody(
++  profile: FinancialProfile,
++  snapshot: FinancialSnapshot,
++  fullName?: string,
++) {
++  const goals = profile.goals?.length ? profile.goals : profile.goal ? [profile.goal] : []
++  const debtPayments = Math.max(profile.debt, 0)
++  return {
++    name: fullName?.trim().split(/\s+/)[0] || 'Flux user',
++    monthly_income: Math.max(profile.income, 1),
++    monthly_expenses: Math.max(profile.housing + profile.expenses, 0),
++    savings: Math.max(profile.savings, 0),
++    debts:
++      debtPayments > 0 || snapshot.totalDebt > 0
++        ? [
++            {
++              name: 'Existing debt payments',
++              balance: Math.max(snapshot.totalDebt, 0),
++              monthly_payment: debtPayments,
++            },
++          ]
++        : [],
++    goals,
++  }
++}
++
++function readCache(): { userId: string; fingerprint: string } | null {
++  if (typeof window === 'undefined') return null
++  try {
++    return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null')
++  } catch {
++    return null
++  }
++}
++
++function writeCache(value: { userId: string; fingerprint: string } | null) {
++  if (typeof window === 'undefined') return
++  if (value) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
++  else window.localStorage.removeItem(STORAGE_KEY)
++}
++
++// Creates the backend user once per profile; re-creates it if the numbers change.
++export async function getBackendUserId(
++  profile: FinancialProfile,
++  snapshot: FinancialSnapshot,
++  fullName?: string,
++): Promise<string> {
++  if (FIXED_USER) return FIXED_USER
++  const body = onboardBody(profile, snapshot, fullName)
++  const fingerprint = JSON.stringify(body)
++  const cached = readCache()
++  if (cached?.fingerprint === fingerprint) return cached.userId
++  const created = await post<OnboardResponse>('/onboard', body, 15000)
++  writeCache({ userId: created.user_id, fingerprint })
++  return created.user_id
++}
++
++// Ask the Flux coach (Gemini + deterministic math tools). Throws if the backend is unreachable,
++// so the caller can fall back to its own local answer.
++export async function askCoach(
++  message: string,
++  profile: FinancialProfile,
++  snapshot: FinancialSnapshot,
++  fullName?: string,
++): Promise<CoachReply> {
++  const send = async () => {
++    const userId = await getBackendUserId(profile, snapshot, fullName)
++    return post<ChatResponse>('/chat', { message, user_id: userId }, 35000)
++  }
++  let answer: ChatResponse
++  try {
++    answer = await send()
++  } catch (error) {
++    // The backend forgot this user (its data file was deleted): create it again and retry once.
++    if (error instanceof BackendError && error.status === 404 && !FIXED_USER) {
++      writeCache(null)
++      answer = await send()
++    } else {
++      throw error
++    }
++  }
++  return { reply: answer.reply, source: answer.source, toolsUsed: answer.tools_used }
++}
++
++let currentAudio: HTMLAudioElement | null = null
++
++export function stopSpeaking() {
++  currentAudio?.pause()
++  currentAudio = null
++  if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel()
++}
++
++function browserSpeak(text: string): 'browser' | 'none' {
++  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return 'none'
++  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))
++  return 'browser'
++}
++
++// Read text aloud: Gemini voice when available, otherwise the browser's own voice.
++// Never throws, so a voice problem cannot break the chat.
++export async function speakReply(text: string): Promise<'gemini' | 'browser' | 'none'> {
++  stopSpeaking()
++  try {
++    const voice = await post<SpeakResponse>('/speak', { text }, 35000)
++    if (!voice.audio_base64) return browserSpeak(voice.text || text)
++    const audio = new Audio(`data:${voice.mime_type || 'audio/wav'};base64,${voice.audio_base64}`)
++    currentAudio = audio
++    await audio.play()
++    return 'gemini'
++  } catch {
++    return browserSpeak(text)
++  }
++}
+diff --git a/src/app/(frontend)/styles.css b/src/app/(frontend)/styles.css
+index f03e332..08cd5cf 100755
+--- a/src/app/(frontend)/styles.css
++++ b/src/app/(frontend)/styles.css
+@@ -1741,6 +1741,24 @@
+   background: var(--forest);
+   color: white;
+ }
++.bubble.pending p {
++  color: var(--muted);
++  font-style: italic;
++}
++.bubble .listen-button {
++  display: inline-block;
++  margin-top: 9px;
++  padding: 4px 10px;
++  border: 1px solid var(--line);
++  border-radius: 999px;
++  background: var(--cream);
++  color: var(--forest);
++  font-size: 10px;
++  cursor: pointer;
++}
++.bubble .listen-button:hover {
++  background: var(--sage);
++}
+ .voice-input-status {
+   min-height: 14px;
+   margin: 6px 5px 0;

@@ -44,7 +44,7 @@ class Vehicle(BaseModel):
 
 class OnboardRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    age: int = Field(ge=13, le=100)
+    age: Optional[int] = Field(default=None, ge=13, le=100)
     monthly_income: float = Field(gt=0)
     monthly_expenses: float = Field(ge=0)
     savings: float = Field(ge=0)

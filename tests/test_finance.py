@@ -80,6 +80,20 @@ def test_retirement_missing_inputs_not_guessed():
     assert "annual_income" in f.retirement_check(user(retirement=RECORDS), 50)["missing_inputs"][0]
 
 
+def test_retirement_without_age_on_record_asks_for_it_instead_of_guessing():
+    no_age = {**USER, "age": None}
+    r = f.retirement_check(no_age, 65, 40000, 200000, 500, 7)
+    assert "on_track" not in r and r["missing_inputs"] == ["current_age (how old you are now)"]
+
+
+def test_retirement_current_age_from_the_user_gives_the_same_answer_as_age_on_record():
+    no_age = {**USER, "age": None}
+    given = f.retirement_check(no_age, 65, 40000, 200000, 500, 7, current_age=22)
+    assert given == f.retirement_check(USER, 65, 40000, 200000, 500, 7) | {
+        "inputs": given["inputs"]}
+    assert given["inputs"]["current_age"]["source"] == "provided by the user"
+
+
 def test_retirement_on_track():
     r = f.retirement_check(USER, 65, 40000, 200000, 500, 7)
     assert r["on_track"] is True and r["shortfall"] == 0
