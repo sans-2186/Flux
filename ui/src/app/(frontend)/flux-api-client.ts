@@ -230,6 +230,94 @@ const ENDPOINTS = {
 } as const
 
 let demoMode = false
+let demoProfile: FinancialProfile = { ...MOCK_PROFILE }
+let demoSnapshot: FinancialSnapshot = structuredClone(MOCK_SNAPSHOT)
+
+function stripDemoExtras(profile: FinancialProfile): FinancialProfile {
+  const copy = { ...profile } as FinancialProfile & { _checking?: number; _debtBalance?: number }
+  delete copy._checking
+  delete copy._debtBalance
+  return copy
+}
+
+/** Rebuild demo snapshot from profile + optional checking/debt overrides (mirrors FluxApp). */
+function applyDemoProfile(profile: FinancialProfile): FinancialSnapshot {
+  const extras = profile as FinancialProfile & { _checking?: number; _debtBalance?: number }
+  const checking =
+    extras._checking ??
+    demoSnapshot.accounts.find((a) => a.type === 'checking')?.balance ??
+    0
+  const debtBalance = extras._debtBalance ?? demoSnapshot.totalDebt
+  const clean = stripDemoExtras(profile)
+  const accounts: FinancialAccount[] = [
+    {
+      id: 'checking-1',
+      name: 'Everyday Checking',
+      type: 'checking',
+      balance: Math.max(checking, 0),
+    },
+    {
+      id: 'savings-1',
+      name: 'Goal Savings',
+      type: 'savings',
+      balance: Math.max(clean.savings, 0),
+    },
+    {
+      id: 'card-1',
+      name: 'Core Visa',
+      type: 'credit-card',
+      balance: Math.max(debtBalance * 0.15, 0),
+      monthlyPayment: Math.max(clean.debt * 0.3, 0),
+    },
+    {
+      id: 'loan-1',
+      name: 'Personal Loan',
+      type: 'loan',
+      balance: Math.max(debtBalance * 0.85, 0),
+      monthlyPayment: Math.max(clean.debt * 0.7, 0),
+    },
+    {
+      id: 'investment-1',
+      name: 'CD & IRA',
+      type: 'investment',
+      balance: Math.max(MOCK_SNAPSHOT.investments, 0),
+    },
+  ]
+  const availableCash = accounts
+    .filter((a) => a.type === 'checking' || a.type === 'savings')
+    .reduce((t, a) => t + a.balance, 0)
+  const investments = accounts.filter((a) => a.type === 'investment').reduce((t, a) => t + a.balance, 0)
+  const totalDebt = accounts
+    .filter((a) => a.type === 'credit-card' || a.type === 'loan')
+    .reduce((t, a) => t + a.balance, 0)
+  demoProfile = clean
+  demoSnapshot = {
+    accounts,
+    availableCash,
+    investments,
+    totalCash: availableCash + investments,
+    totalDebt,
+    monthlyObligations: clean.debt,
+    netPosition: availableCash + investments - totalDebt,
+    obligations: [
+      { id: 'rent', name: 'Rent / housing', amount: clean.housing, dueInDays: 5 },
+      {
+        id: 'card',
+        name: 'Credit card',
+        amount: Math.max(clean.debt * 0.3, 0),
+        dueInDays: 8,
+      },
+      {
+        id: 'loan',
+        name: 'Loan payment',
+        amount: Math.max(clean.debt * 0.7, 0),
+        dueInDays: 12,
+      },
+    ],
+  }
+  return demoSnapshot
+}
+
 
 class ApiError extends Error {
   constructor(
@@ -298,6 +386,16 @@ export const api = {
   source: 'backend' as DataSource,
   setDemoMode: (enabled: boolean) => {
     demoMode = enabled
+    if (enabled) {
+      demoProfile = { ...MOCK_PROFILE }
+      demoSnapshot = structuredClone(MOCK_SNAPSHOT)
+    }
+  },
+  /** Push the live React snapshot into demo storage so My Finances / reloads stay in sync. */
+  syncDemoSnapshot: (profile: FinancialProfile, snapshot: FinancialSnapshot) => {
+    if (!demoMode) return
+    demoProfile = stripDemoExtras(profile)
+    demoSnapshot = structuredClone(snapshot)
   },
   getSession: () =>
     demoMode
@@ -326,18 +424,21 @@ export const api = {
         }),
   // Demo mode stays on the device: no Payload / Figma environment needed.
   getFinancialProfile: () =>
-    demoMode ? Promise.resolve({ ...MOCK_PROFILE }) : request<FinancialProfile>(ENDPOINTS.profile),
+    demoMode ? Promise.resolve({ ...demoProfile }) : request<FinancialProfile>(ENDPOINTS.profile),
   getFinancialSnapshot: () =>
     demoMode
-      ? Promise.resolve({ ...MOCK_SNAPSHOT })
+      ? Promise.resolve(structuredClone(demoSnapshot))
       : request<FinancialSnapshot>(ENDPOINTS.snapshot),
-  updateFinancialProfile: (profile: FinancialProfile) =>
-    demoMode
-      ? Promise.resolve({ ...profile })
-      : request<FinancialProfile>(ENDPOINTS.profile, {
-          method: 'PATCH',
-          body: JSON.stringify(profile),
-        }),
+  updateFinancialProfile: (profile: FinancialProfile) => {
+    if (!demoMode) {
+      return request<FinancialProfile>(ENDPOINTS.profile, {
+        method: 'PATCH',
+        body: JSON.stringify(stripDemoExtras(profile)),
+      })
+    }
+    applyDemoProfile(profile)
+    return Promise.resolve({ ...demoProfile })
+  },
   getFinancialGoals: () =>
     demoMode ? Promise.resolve([...MOCK_GOALS]) : request<FinancialGoal[]>(ENDPOINTS.goals),
   getAvailableScenarios: () =>

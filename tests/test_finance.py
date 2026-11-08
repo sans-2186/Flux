@@ -17,6 +17,15 @@ def test_surplus_and_debt_payments():
     assert f.monthly_surplus(USER) == 800.0
 
 
+def test_money_overview_one_shot():
+    r = f.money_overview(USER)
+    assert r["monthly_income"] == 3000.0
+    assert r["liquid_cash"] == 4000.0
+    assert r["monthly_surplus"] == 800.0
+    assert r["total_debt_balances"] == 12000.0
+    assert r["emergency_fund_months"] == 1.82
+
+
 def test_card_payment_is_only_what_is_recorded():
     u = user(credit_card_balance=1000.0, credit_limit=4000.0)
     assert f.monthly_debt_payments(u) == 200.0

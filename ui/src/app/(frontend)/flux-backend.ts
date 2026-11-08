@@ -63,20 +63,28 @@ export function onboardBody(
 ) {
   const goals = profile.goals?.length ? profile.goals : profile.goal ? [profile.goal] : []
   const debtPayments = Math.max(profile.debt, 0)
+  const checking =
+    snapshot.accounts.find((account) => account.type === 'checking')?.balance ?? 0
+  // Backend "savings" is liquid cash used for afford / emergency-fund math: checking + savings.
+  const liquidCash = Math.max(checking, 0) + Math.max(profile.savings, 0)
+  const cardShare = Math.max(snapshot.totalDebt * 0.15, 0)
   return {
     name: fullName?.trim().split(/\s+/)[0] || 'Flux user',
     monthly_income: Math.max(profile.income, 1),
     monthly_expenses: Math.max(profile.housing + profile.expenses, 0),
-    savings: Math.max(profile.savings, 0),
+    savings: liquidCash,
+    credit_card_balance: cardShare,
+    credit_limit: cardShare > 0 ? Math.max(cardShare * 4, 500) : 0,
+    credit_card_payment: Math.max(profile.debt * 0.3, 0),
     debts:
       debtPayments > 0 || snapshot.totalDebt > 0
         ? [
             {
-              name: 'Existing debt payments',
-              balance: Math.max(snapshot.totalDebt, 0),
-              monthly_payment: debtPayments,
+              name: 'Loans and remaining debt',
+              balance: Math.max(snapshot.totalDebt - cardShare, 0),
+              monthly_payment: Math.max(profile.debt * 0.7, 0),
             },
-          ]
+          ].filter((d) => d.balance > 0 || d.monthly_payment > 0)
         : [],
     goals,
   }
@@ -108,7 +116,7 @@ export async function getBackendUserId(
   const fingerprint = JSON.stringify(body)
   const cached = readCache()
   if (cached?.fingerprint === fingerprint) return cached.userId
-  const created = await post<OnboardResponse>('/onboard', body, 15000)
+  const created = await post<OnboardResponse>('/onboard', body, 10000)
   writeCache({ userId: created.user_id, fingerprint })
   return created.user_id
 }
@@ -123,7 +131,7 @@ export async function askCoach(
 ): Promise<CoachReply> {
   const send = async () => {
     const userId = await getBackendUserId(profile, snapshot, fullName)
-    return post<ChatResponse>('/chat', { message, user_id: userId }, 35000)
+    return post<ChatResponse>('/chat', { message, user_id: userId }, 20000)
   }
   let answer: ChatResponse
   try {
@@ -150,16 +158,35 @@ export function stopSpeaking() {
 
 function browserSpeak(text: string): 'browser' | 'none' {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return 'none'
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text))
+  const synth = window.speechSynthesis
+  // Chrome often stalls the first speak() until voices are loaded / a prior cancel.
+  synth.cancel()
+  const utter = new SpeechSynthesisUtterance(text)
+  utter.rate = 1.05
+  const voices = synth.getVoices()
+  const preferred = voices.find((v) => /en(-|_)US/i.test(v.lang) && /female|samantha|google us/i.test(v.name))
+    || voices.find((v) => /^en/i.test(v.lang))
+  if (preferred) utter.voice = preferred
+  // Kick the synthesizer awake on engines that queue silently after cancel().
+  if (voices.length === 0) {
+    synth.addEventListener('voiceschanged', () => synth.speak(utter), { once: true })
+    synth.getVoices()
+  }
+  synth.speak(utter)
   return 'browser'
 }
 
 // Read text aloud: Gemini voice when available, otherwise the browser's own voice.
 // Never throws, so a voice problem cannot break the chat.
-export async function speakReply(text: string): Promise<'gemini' | 'browser' | 'none'> {
+export async function speakReply(
+  text: string,
+  options?: { preferBrowser?: boolean },
+): Promise<'gemini' | 'browser' | 'none'> {
   stopSpeaking()
+  // Listen button uses the browser voice so feedback is immediate. Mic replies still try Gemini TTS.
+  if (options?.preferBrowser) return browserSpeak(text)
   try {
-    const voice = await post<SpeakResponse>('/speak', { text }, 35000)
+    const voice = await post<SpeakResponse>('/speak', { text }, 20000)
     if (!voice.audio_base64) return browserSpeak(voice.text || text)
     const audio = new Audio(`data:${voice.mime_type || 'audio/wav'};base64,${voice.audio_base64}`)
     currentAudio = audio

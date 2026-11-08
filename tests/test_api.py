@@ -177,8 +177,8 @@ def test_chat_coach_runs_real_function_calling_loop(monkeypatch):
     assert r["source"] == "gemini" and r["mode"] == "coach"
     assert r["tools_used"] == ["can_afford"]
     assert "affordable" in r["reply"] and "monthly_surplus" in r["reply"]
-    assert declared_tools() == {"can_afford", "retirement_check", "forecast_balances", "what_if",
-                                "trade_in_check", "spending_breakdown", "health_check"}
+    assert declared_tools() == {"money_overview", "can_afford", "retirement_check", "forecast_balances",
+                                "what_if", "trade_in_check", "spending_breakdown", "health_check"}
 
 
 def test_toyota_chat_runs_function_calling_with_toyota_tools(monkeypatch):
