@@ -14,7 +14,8 @@ log = logging.getLogger("flux.llm")
 
 # Primary: quality. Plan B (fallbacks): lite models when the primary is busy or erroring.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "280"))
+# Thinking models count their hidden reasoning against this cap, so keep it generous.
+MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
 DISCLAIMER = "Not financial advice - just education to help you decide."
 
 EDUCATION_PROMPT = (

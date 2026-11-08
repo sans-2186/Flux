@@ -1,4 +1,4 @@
-"""User lookup: PNC mock customers (read-only) and users added via /onboard.
+"""User lookup: PNC mock customers (C001..), Toyota pack customers (TY-C001..), and users added via /onboard.
 
 Onboarded users live in memory, mirrored to a JSON file (default data/users.json).
 """
@@ -7,7 +7,7 @@ import os
 import uuid
 from pathlib import Path
 
-from app import mockdata
+from app import mockdata, toyota
 
 _users = None
 
@@ -36,4 +36,4 @@ def add_user(record):
 
 
 def get_user(user_id):
-    return _load().get(user_id) or mockdata.get_user(user_id)
+    return _load().get(user_id) or mockdata.get_user(user_id) or toyota.get_user(user_id)

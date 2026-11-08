@@ -77,7 +77,10 @@ def test_health_endpoint():
 
 def test_demo_users_listed_and_usable():
     users = client.get("/demo-users").json()
-    assert len(users) == 30 and users[0]["user_id"] == "C001"
+    pnc = [u for u in users if u["track"] == "pnc"]
+    ty = [u for u in users if u["track"] == "toyota"]
+    assert len(pnc) == 30 and pnc[0]["user_id"] == "C001"
+    assert len(ty) == 20 and ty[0]["user_id"] == "TY-C001" and ty[0]["customer_says"]
     r = client.get("/health/C001").json()
     assert r["data_source"] == "pnc_mock" and len(r["indicators"]) == 4
 
@@ -107,6 +110,7 @@ def test_chat_coach_falls_back_to_health_snapshot_without_gemini(monkeypatch):
 class FakeGemini(BaseHTTPRequestHandler):
     """Speaks Gemini's REST format. Turn 1: ask to call a tool. Turn 2: answer from the tool result."""
     seen = []
+    call = {"name": "can_afford", "args": {"price": 300}}
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -115,9 +119,9 @@ class FakeGemini(BaseHTTPRequestHandler):
                      if "functionResponse" in p]
         if responses:
             result = responses[0]["response"]["result"]
-            part = {"text": f"Tool said affordable={result['affordable']} for price {result['price']}."}
+            part = {"text": "TOOL_KEYS=" + ",".join(sorted(result))}
         else:
-            part = {"functionCall": {"name": "can_afford", "args": {"price": 300}}}
+            part = {"functionCall": dict(FakeGemini.call)}
         payload = {"candidates": [{"content": {"role": "model", "parts": [part]}, "finishReason": "STOP"}]}
         data = json.dumps(payload).encode()
         self.send_response(200)
@@ -130,8 +134,8 @@ class FakeGemini(BaseHTTPRequestHandler):
         pass
 
 
-def test_chat_coach_runs_real_function_calling_loop(monkeypatch):
-    """End to end through the google-genai SDK against a fake Gemini server (no API key needed)."""
+def run_fake_gemini(monkeypatch, user_id, message, call):
+    """Run /chat through the real google-genai SDK against a fake local Gemini server."""
     from google import genai
     from google.genai import types
 
@@ -143,14 +147,53 @@ def test_chat_coach_runs_real_function_calling_loop(monkeypatch):
             api_key="fake",
             http_options=types.HttpOptions(base_url=f"http://127.0.0.1:{server.server_port}")))
         FakeGemini.seen.clear()
-        uid = onboard()["user_id"]
-        r = client.post("/chat", json={"message": "can I buy a $300 bag?", "user_id": uid}).json()
+        FakeGemini.call = call
+        return client.post("/chat", json={"message": message, "user_id": user_id}).json()
     finally:
         server.shutdown()
 
+
+def declared_tools():
+    return {d["name"] for t in FakeGemini.seen[0]["tools"] for d in t["functionDeclarations"]}
+
+
+def test_chat_coach_runs_real_function_calling_loop(monkeypatch):
+    """End to end through the google-genai SDK against a fake Gemini server (no API key needed)."""
+    uid = onboard()["user_id"]
+    r = run_fake_gemini(monkeypatch, uid, "can I buy a $300 bag?",
+                        {"name": "can_afford", "args": {"price": 300}})
     assert r["source"] == "gemini" and r["mode"] == "coach"
     assert r["tools_used"] == ["can_afford"]
-    assert "affordable=True for price 300." in r["reply"]
-    declared = {d["name"] for t in FakeGemini.seen[0]["tools"] for d in t["functionDeclarations"]}
-    assert declared == {"can_afford", "retirement_check", "forecast_balances", "what_if",
-                        "trade_in_check", "spending_breakdown", "health_check"}
+    assert "affordable" in r["reply"] and "monthly_surplus" in r["reply"]
+    assert declared_tools() == {"can_afford", "retirement_check", "forecast_balances", "what_if",
+                                "trade_in_check", "spending_breakdown", "health_check"}
+
+
+def test_toyota_chat_runs_function_calling_with_toyota_tools(monkeypatch):
+    r = run_fake_gemini(monkeypatch, "TY-C001", "Am I overpaying?",
+                        {"name": "next_move_options", "args": {}})
+    assert r["source"] == "gemini" and r["tools_used"] == ["next_move_options"]
+    assert "guardrails" in r["reply"] and "options" in r["reply"]
+    assert declared_tools() == {"next_move_options", "trade_in_check"}
+
+
+def test_retirement_tool_args_reach_python_through_sdk(monkeypatch):
+    r = run_fake_gemini(monkeypatch, "C002", "can I retire at 50 on 90k?",
+                        {"name": "retirement_check", "args": {"target_age": 50, "annual_income": 90000}})
+    assert r["tools_used"] == ["retirement_check"] and "needed_balance" in r["reply"]
+
+
+def test_toyota_endpoints_and_guards():
+    r = client.get("/next-move/TY-C014").json()
+    assert r["guardrails"]["must_offer_human"] is True
+    assert not any(o["option_id"] in ("REFI", "TRADE", "EXTEND") for o in r["options"])
+    assert client.get("/next-move/C001").status_code == 400
+    assert client.get("/next-move/TY-C999").status_code == 404
+    assert client.get("/health/TY-C001").status_code == 400
+
+
+def test_toyota_chat_falls_back_to_data_summary_without_gemini(monkeypatch):
+    monkeypatch.setattr(llm, "run_chain", lambda *a, **k: None)
+    r = client.post("/chat", json={"message": "what should I do?", "user_id": "TY-C001"}).json()
+    assert r["mode"] == "coach" and r["source"] == "fallback_health"
+    assert "Refinance" in r["reply"] and r["reply"].endswith(llm.DISCLAIMER)

@@ -2,7 +2,7 @@
 
 Voice-first AI money coach for Gen Z (HackUTD: PNC 360° Financial Health Navigator, Toyota "What's Your Next Move?", Gemini API).
 
-Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/health`, Gemini tools, personalized `/chat`), now **grounded on PNC's mock dataset** (no hidden assumptions, see "How the agent uses the mock data"). Next: Voice `/speak`, then Phase 3 (fraud alert).
+Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/health`, Gemini tools, personalized `/chat`), now **grounded on PNC's mock dataset** (no hidden assumptions, see "How the agent uses the mock data"). **Toyota track added** (vehicle finances, from Toyota's "Next Move" data pack: `/next-move`). Next: Voice `/speak`, then Phase 3 (fraud alert).
 
 ## Saved checkpoints
 
@@ -13,6 +13,7 @@ Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished p
 | `phase-1` | Setup + PNC wellness math + `/chat` education |
 | `phase-2` | `/onboard`, `/health`, deterministic tools, Gemini function calling in `/chat` (first version, used some assumptions) |
 | `phase-2.1` | Same, grounded on PNC's mock data: 30 demo customers, no assumed rates/payments/budget weights |
+| `phase-2.2` | Adds the Toyota data pack: 20 Toyota customers (`TY-C001`..`TY-C020`), `/next-move/{id}`, Toyota guardrails, coach tools for vehicle finance |
 
 ```bash
 git clone https://github.com/sans-2186/Flux.git && cd Flux   # latest work
@@ -36,6 +37,17 @@ git fetch --tags && git checkout phase-1                      # look at an old p
 - Tools are exact and repeatable: same input, same numbers (pytest). Example: car worth 15000 with 11000 loan gives equity +4000.
 - `POST /chat` with a `user_id` returns `"mode":"coach"`, `"source":"gemini"` and `"tools_used":[...]`. If `tools_used` is empty on a personal question, Gemini answered without checking the numbers; ask again.
 - Unknown `user_id` returns HTTP 404.
+
+**Toyota track (done)** - vehicle finances, grounded on Toyota's pack (`mock/toyota/`)
+- `GET /demo-users` now returns 50 people: 30 with `"track":"pnc"` and 20 with `"track":"toyota"` (`TY-C001`..`TY-C020`; extra fields `vehicle`, `contract_type`, `customer_says`).
+- `GET /next-move/TY-C001` returns the customer's situation, the guardrails that apply, and the eligible options (KEEP, REFI, EXTEND, EXTRA100, DUEDATE, TRADE, plus AUTOPAY and PAYOFF when the data calls for them). Every option's summary, assumption and tradeoff text comes from the pack.
+- Expected `best next move` per customer matches the pack's answer key in `golden_answers.csv` (tests check that all 20 are reachable with the right step type): C001 refinance (Eligible offer), C002 specialist call about a deferral (Follow-up), C005 autopay + payoff quote (Self-service), C014 hardship specialist today (Follow-up), C018 move the due date (Self-service), C020 wait until the loan ends (Self-service).
+- Guardrails, enforced in Python (the model never sees withheld options):
+  - `TY-C014` (2 missed payments), `TY-C002`, `TY-C011`, `TY-C016` (vulnerable): no refinance/extend/trade/buyout/renewal offers, no "pay extra", and a `HUMAN` option is added.
+  - Customers with `marketing_consent = N`: no new-vehicle offers (`TRADE`, `RENEW`).
+  - A loan with 12 or fewer payments left: the `TRADE` option carries a timing note.
+- `POST /chat {"message":"I missed two payments, what now?","user_id":"TY-C014"}` uses only `next_move_options` and `trade_in_check`, offers a specialist, and does not upsell. Without Gemini it answers from the data (`"source":"fallback_health"`).
+- `GET /health/TY-C001` returns HTTP 400 (Toyota customers only have vehicle-finance data); use `/next-move/TY-C001`.
 
 **Phase 3 (planned)**
 - A transaction 5x bigger than usual, from a new merchant, or at 3 AM shows up in `/alerts/{user_id}` with a plain-language reason. A normal grocery purchase does not.
@@ -68,7 +80,9 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 
 | File | What it does |
 |---|---|
-| `app/main.py` | FastAPI app and endpoints: `GET /`, `POST /onboard`, `GET /health/{id}`, `POST /chat`; CORS open |
+| `app/main.py` | FastAPI app and endpoints: `GET /`, `GET /demo-users`, `POST /onboard`, `GET /health/{id}`, `GET /next-move/{id}`, `POST /chat`; CORS open |
+| `app/toyota.py` | **Toyota track**: loads the data pack into customer records; `next_move_options` (guardrails + option list), `trade_in_check`, data-only fallback text. Plain Python, no LLM |
+| `mock/toyota/*.csv` | Toyota's "Next Move" pack, copied unchanged: customers, accounts, vehicles, situations, 142 precomputed option scenarios, offers catalog, rate sheet, value drivers, and `golden_answers.csv` (the answer key; used only by tests, never by the agent) |
 | `app/finance.py` | **All deterministic math**: budget, health indicators, can_afford, retirement_check, spending_breakdown, forecast_balances, what_if, trade_in_equity/trade_in_check |
 | `app/mockdata.py` | Loads PNC's mock dataset and builds one user record per customer; every number is computed from the accounts and ledger |
 | `app/agent.py` | Wraps the finance functions as Gemini tools (plain Python functions, SDK does function calling); coach system prompt (never guess, ask for missing inputs); health-snapshot fallback |
@@ -87,6 +101,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 | `wellness/__init__.py`, `wellness/LICENSE-PNC` | Package marker; PNC's Apache-2.0 license |
 | `tests/test_finance.py` | Tests for the math: affordability, retirement (known values, missing inputs), trade-in equity, health, budget, spending, forecast, what-if |
 | `tests/test_mockdata.py` | Checks the loader against the raw CSVs: balances, scheduled payments, IRA data, vehicles, all 30 customers |
+| `tests/test_toyota.py` | Toyota tests: loader vs raw CSVs, all 20 golden best-moves reachable, guardrails (vulnerable, missed payments, no marketing consent), trade-in rules, lease handling, fallback text |
 | `tests/test_api.py` | API tests: onboard, health, 404s, persistence, chat fallbacks, and a full Gemini function-calling loop against a fake local Gemini server |
 | `tests/test_wellness.py`, `tests/test_fallbacks.py` | Vendored PNC math tests; canned-answer fallback tests |
 | `setup.sh` | Mac/Linux one-shot: creates `.venv`, installs deps, copies `.env.example` |
@@ -114,7 +129,7 @@ curl http://localhost:8000/
 ```
 
 ### `GET /demo-users`
-The 30 PNC mock customers: `user_id` (`C001`..`C030`), name, age, goals, `has_vehicle`. Frontend: use this for a "pick a demo user" dropdown.
+All 50 demo customers. `track:"pnc"` (`C001`..`C030`): name, age, goals, `has_vehicle`. `track:"toyota"` (`TY-C001`..`TY-C020`): name, age, `vehicle`, `contract_type`, `customer_says`. Frontend: use this for a "pick a demo user" dropdown.
 ```bash
 curl http://localhost:8000/demo-users
 # [{"user_id":"C001","name":"Sam","age":25,"goals":[...],"has_vehicle":false}, ...]
@@ -131,10 +146,16 @@ curl http://localhost:8000/health/C002
 ```
 Thresholds are PNC's: savings rate good >= 20%, ok >= 10%; debt-to-income good <= 20%, ok <= 36%; emergency fund good >= 6 months, ok >= 3; credit utilization good <= 10%, ok <= 30%. PNC's `watch` label is shown as `ok`.
 
+### `GET /next-move/{user_id}`
+Toyota customers only (`TY-C001`..`TY-C020`; others return HTTP 400). Returns `customer`, `vehicle`, `account`, `situation`, `guardrails` (`upsell_allowed`, `new_vehicle_offers_allowed`, `must_offer_human`, `human_specialist_available`, `rules_applied`), `options` (each with `option_id`, `status`, `next_step_type`, `summary`, `assumption`, `tradeoff`) and `not_eligible` (with the reason).
+```bash
+curl http://localhost:8000/next-move/TY-C001
+```
+
 ### `POST /chat`
 Body `{"message": str, "user_id": str | null}`.
 - **Without `user_id`** (Phase 1): general education via Gemini, 3-5 sentences. `"mode":"education"`.
-- **With `user_id`** (a demo customer id or one from `/onboard`): Gemini gets the seven tools below and must call them for any personal number. `"mode":"coach"`, `tools_used` lists which tools ran.
+- **With `user_id`** (a demo customer id or one from `/onboard`): Gemini gets the tools below and must call them for any personal number. For Toyota customers (`TY-...`) it gets only `next_move_options` and `trade_in_check`. `"mode":"coach"`, `tools_used` lists which tools ran.
 ```bash
 curl -X POST http://localhost:8000/chat -H 'Content-Type: application/json' \
   -d '{"message":"can I buy a $300 bag?","user_id":"C002"}'
@@ -161,10 +182,14 @@ curl -X POST http://localhost:8000/chat -H 'Content-Type: application/json' \
 | `what_if` | dollar deltas: `monthly_income_change`, `monthly_expenses_change`, `savings_change`, `debt_payment_change`, `credit_card_balance_change` | before/after value and status per indicator, surplus before/after |
 | `trade_in_check` | none (uses the user's vehicle) | `estimated_equity` = value - loan balance, `makes_sense_now`, `reason`, ONE `next_step` of type `self_service` / `follow_up` / `eligible_offer` |
 | `health_check` | none | the 4 indicators (extra helper so "how am I doing?" works) |
+| `next_move_options` (Toyota customers) | none | situation, guardrails and the allowed options with the pack's summary/assumption/tradeoff text; withheld options are not included |
+| `trade_in_check` (Toyota customers) | none | equity = estimated value - payoff (loan) or - (residual + $350) (lease), `makes_sense_now`, `reason`, ONE `next_step` (Self-service / Follow-up / Eligible offer) |
 
 `what_if(change)` from the spec is implemented as numeric dollar deltas rather than free text, so Gemini only has to map words to numbers ("cut $200 of dining" -> `monthly_expenses_change=-200`) and Python does the rest.
 
 ### How the agent uses the mock data ("training")
+
+Toyota customers work the same way: `app/toyota.py` loads Toyota's pack, and the agent only sees what `next_move_options` returns. The pack's `golden_answers.csv` is the judges' answer key: it is used by tests only and is never given to the agent.
 
 Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is not practical in a 24-hour hackathon. Instead the agent is *grounded* on the mock data:
 
@@ -178,7 +203,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 | Function | Kind |
 |---|---|
 | `finance.can_afford`, `retirement_check`, `spending_breakdown`, `forecast_balances`, `what_if`, `trade_in_equity`, `trade_in_check`, `generate_budget`, `health_indicators`, `monthly_debt_payments` | Deterministic Python (no randomness, no LLM) |
-| `mockdata.*` | Deterministic Python (reads CSV/JSON files) |
+| `mockdata.*`, `toyota.*` (options, guardrails, trade-in check, fallback text) | Deterministic Python (reads CSV/JSON files) |
 | `wellness.metrics.compute_metrics`, `wellness.forecast.forecast_cash` | Deterministic Python (PNC) |
 | `llm.with_disclaimer`, `store.*`, `demo_fallbacks.lookup` | Deterministic Python |
 | `llm.explain` | **LLM call**: education answer, no user numbers |
@@ -188,6 +213,12 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 
 - **Function calling is not verified against the real Gemini service.** No Gemini key exists in the build environment. It IS verified through the real `google-genai` SDK against a fake local server that speaks Gemini's REST format (`tests/test_api.py::test_chat_coach_runs_real_function_calling_loop`): tools are declared, the SDK calls our Python function, and the result goes back. Please run the three coach curls above once with your key. Check the uvicorn terminal for `flux.llm` warnings if you see `fallback_health`.
 - The SDK prints "Direct use of automatic function calling in Models.generate_content is not recommended". It is a warning only; it works.
+- **Toyota pack notes:**
+  - The pack's option numbers (payments, interest, payoff) are precomputed by Toyota; Flux does not recompute them. AUTOPAY and PAYOFF are added by Flux from the account data (`autopay = N`, payoff quote).
+  - The pack uses "Offer / Self-service / Follow-up" step types; options without one in the catalog are mapped by us: KEEP = Self-service, EXTEND LEASE and END EARLY = Follow-up.
+  - Our own rules on top of the pack: hide "pay extra" for distressed customers; trade-in "wait" when 12 or fewer payments remain; trade-in goes to a human when LTV is over 125%. LTV and the 12-month rule are policy numbers we chose.
+  - `trade_in_check` for Toyota leases says it does not apply (lease options are in `next_move_options`).
+  - PNC customers' Toyotas in `mock/people.json` remain invented; Toyota-track customers use the real pack data.
 - **Mocked / stubbed:**
   - `mock/people.json`: names, ages, goals and Toyota vehicles are invented. PNC's data has none of them. Vehicle `value` is a made-up estimate (MSRP x 0.87^age), so trade-in equity = that made-up value minus the real loan balance from the data.
   - `eligible_offer` in `trade_in_check` is a label only. No real Toyota offer or valuation lookup.
@@ -203,6 +234,8 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 - Storage is in memory plus a JSON file (`data/users.json`, git-ignored). No auth: anyone with a `user_id` can read that profile. One process only.
 - No conversation memory: each `/chat` call is independent.
 - `gemini-3.8-flash` can be slow or return 503. `/chat` retries once, then tries `gemini-3.5-flash-lite`, then `gemini-3.1-flash-lite`, then falls back to canned text (education) or a health snapshot (coach).
+- `GEMINI_MAX_OUTPUT_TOKENS` defaults to 1024: thinking models count hidden reasoning against the cap, and a low cap can cut answers off.
+- Tool numeric parameters are declared as plain `float` (not `Optional[float]`): the SDK rejects whole numbers like 90000 for `Optional[float]`. Found by a test; fixed.
 - Extended "thinking" is not disabled by default any more (not every 3.x model accepts `thinking_budget`). Opt in with `GEMINI_THINKING_BUDGET=0` if your model accepts it and you want speed.
 
 ## 6. How to run
@@ -212,7 +245,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 # paste GEMINI_API_KEY into .env
 source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000     # interactive docs: http://localhost:8000/docs
-python -m pytest -q              # 62 tests, no API key needed
+python -m pytest -q              # 117 tests, no API key needed
 ```
 Use a second terminal for curl. After editing `.env`, restart uvicorn.
 
@@ -228,7 +261,8 @@ Use a second terminal for curl. After editing `.env`, restart uvicorn.
 | `/chat` with `user_id` says `"source":"fallback_health"` | Gemini failed on every model. Read the `flux.llm` warnings in the uvicorn terminal (bad key, quota, model name, 503) |
 | `"source":"gemini:gemini-3.5-flash-lite"` | The primary model was busy; the backup answered. Fine |
 | `"tools_used":[]` on a personal question | Gemini answered without calling a tool. Ask again, or be more specific ("can I afford $300?") |
-| 404 `Unknown user_id` | Use `C001`..`C030` (see `/demo-users`), or an id from `/onboard`. Onboarded ids are lost if `data/users.json` is deleted |
+| 400 on `/health/TY-...` or `/next-move/C0xx` | `/health` is for PNC customers, `/next-move` is for Toyota customers (`TY-C001`..`TY-C020`) |
+| 404 `Unknown user_id` | Use `C001`..`C030` or `TY-C001`..`TY-C020` (see `/demo-users`), or an id from `/onboard`. Onboarded ids are lost if `data/users.json` is deleted |
 | Agent says it needs `current_savings` etc. | Working as intended for users without records: the tool refuses to guess. Give the values in the chat, or use a demo customer |
 | 422 on `/onboard` | A required field is missing or invalid (`monthly_income` must be > 0; numbers cannot be negative) |
 | `404` model no longer available (new API keys) | Set `GEMINI_MODEL=gemini-3.8-flash` in `.env` and restart (`2.5-*` is blocked for new users) |

@@ -4,9 +4,7 @@ Gemini never does math. It picks a tool, the tool returns exact numbers, Gemini 
 """
 from __future__ import annotations
 
-from typing import Optional
-
-from app import finance, llm
+from app import finance, llm, toyota
 
 COACH_PROMPT = (
     "You are Flux, a friendly voice-first money coach for Gen Z, talking to {name}. "
@@ -22,9 +20,46 @@ COACH_PROMPT = (
     "Do not add a disclaimer; the app adds one."
 )
 
+TOYOTA_PROMPT = (
+    "You are Flux, the Toyota 'Next Move' assistant, talking to {name} about their Toyota. "
+    "Always call next_move_options first for any question about their car, loan, lease or next move; "
+    "also call trade_in_check for trade-in questions. "
+    "Use ONLY numbers that appear in tool results. Never invent rates, payments or eligibility, and never do arithmetic. "
+    "Explain at an 8th-grade reading level and define any jargon in one short line. "
+    "Recommend ONE best next move, then name one or two alternatives and the trade-off of each (cost now vs cost later). "
+    "State assumptions out loud (rate source, estimated vehicle value, taxes excluded). "
+    "Only suggest options listed in the tool result; never mention anything that is not listed. "
+    "Obey the guardrails in the result: if upsell is not allowed or the customer sounds distressed, no upsell, "
+    "no marketing, and offer a human specialist. Respect any timing_note and do not push a new vehicle. "
+    "If nothing is eligible, say so honestly and say when to re-check. "
+    "End with exactly one next step labeled Self-service, Follow-up, or Eligible offer. "
+    "Never give legal, tax or credit-repair advice. All data is synthetic. "
+    "Use 5 to 7 short, casual sentences with no markdown, lists or emojis, because it is read aloud. "
+    "Do not add a disclaimer; the app adds one."
+)
+
+
+def make_toyota_tools(user: dict, trace: list):
+    def next_move_options() -> dict:
+        """Get the customer's situation, contract and vehicle facts, the guardrails that apply, and the
+        options they may be shown (with payments, cost versus keeping the contract, assumptions and
+        trade-offs). Pick ONE best move from the options."""
+        trace.append("next_move_options")
+        return toyota.next_move_options(user)
+
+    def trade_in_check() -> dict:
+        """Estimate the equity in the customer's Toyota (value minus payoff), say whether trading in now
+        makes sense, and give ONE next step (Self-service, Follow-up or Eligible offer)."""
+        trace.append("trade_in_check")
+        return toyota.trade_in_check(user)
+
+    return [next_move_options, trade_in_check]
+
 
 def make_tools(user: dict, trace: list):
     """Build the tool functions Gemini may call. Docstrings become the tool descriptions."""
+    if user.get("source") == "toyota_pack":
+        return make_toyota_tools(user, trace)
 
     def can_afford(price: float) -> dict:
         """Check if the user can afford a one-time purchase. Returns yes/no (affordable), the reason,
@@ -32,25 +67,25 @@ def make_tools(user: dict, trace: list):
         trace.append("can_afford")
         return finance.can_afford(user, price)
 
-    def retirement_check(target_age: int, annual_income: Optional[float] = None,
-                         current_savings: Optional[float] = None,
-                         monthly_contribution: Optional[float] = None,
-                         annual_return_pct: Optional[float] = None) -> dict:
+    # Parameters are plain `float = None`, not Optional[float]: the SDK rejects whole numbers
+    # (e.g. 90000) for Optional[float] but accepts them for float.
+    def retirement_check(target_age: float, annual_income: float = None, current_savings: float = None,
+                         monthly_contribution: float = None, annual_return_pct: float = None) -> dict:
         """Check if the user can retire at target_age. annual_income is the YEARLY INCOME THEY WANT
         IN RETIREMENT in dollars (for 'retire at 50 on 90k' use 90000). The other values default to
         the user's records; only pass them if the user stated them. If the result has
         missing_inputs, ask the user for those values instead of guessing."""
         trace.append("retirement_check")
-        return finance.retirement_check(user, target_age, annual_income, current_savings,
+        return finance.retirement_check(user, int(target_age), annual_income, current_savings,
                                         monthly_contribution, annual_return_pct)
 
-    def spending_breakdown(months: int = 3) -> dict:
+    def spending_breakdown(months: float = 3) -> dict:
         """Average monthly spending by category over the last N months from the user's real
         transaction history, with the change versus the N months before."""
         trace.append("spending_breakdown")
         return finance.spending_breakdown(user, months)
 
-    def forecast_balances(months: int = 12) -> dict:
+    def forecast_balances(months: float = 12) -> dict:
         """Project the user's cash balance for the next number of months, with monthly income,
         obligations, ending balance and whether it ever goes negative."""
         trace.append("forecast_balances")
@@ -84,6 +119,8 @@ def make_tools(user: dict, trace: list):
 
 def health_fallback(user: dict) -> str:
     """Plain deterministic summary used when Gemini is unreachable."""
+    if user.get("source") == "toyota_pack":
+        return toyota.fallback_text(user)
     parts = [f"{i['label']}: {i['status']}. {i['explanation']}" for i in finance.health_indicators(user)]
     return ("Flux could not reach the AI just now, so here is your snapshot from the numbers. "
             + " ".join(parts))
@@ -92,7 +129,8 @@ def health_fallback(user: dict) -> str:
 def coach_reply(user: dict, message: str):
     """Returns (text, source, tools_used)."""
     trace: list[str] = []
-    result = llm.run_chain(message, COACH_PROMPT.format(name=user["name"]), make_tools(user, trace))
+    prompt = TOYOTA_PROMPT if user.get("source") == "toyota_pack" else COACH_PROMPT
+    result = llm.run_chain(message, prompt.format(name=user["name"]), make_tools(user, trace))
     tools_used = list(dict.fromkeys(trace))
     if result is None:
         return health_fallback(user), "fallback_health", tools_used

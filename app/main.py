@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app import agent, finance, llm, mockdata, store
+from app import agent, finance, llm, mockdata, store, toyota
 
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -71,8 +71,10 @@ def root():
 
 @app.get("/demo-users")
 def demo_users():
-    """The 30 PNC mock customers. Use their user_id (C001..C030) in /health and /chat."""
-    return mockdata.list_users()
+    """Demo customers. track=pnc: C001..C030 (financial health). track=toyota: TY-C001..TY-C020
+    (vehicle finance). Use the user_id in /chat; /health is for pnc, /next-move is for toyota."""
+    return ([{**u, "track": "pnc"} for u in mockdata.list_users()]
+            + [{**u, "track": "toyota"} for u in toyota.list_users()])
 
 
 @app.post("/onboard")
@@ -84,9 +86,21 @@ def onboard(req: OnboardRequest):
             "health": finance.health_indicators(record)}
 
 
+@app.get("/next-move/{user_id}")
+def next_move(user_id: str):
+    """Toyota track, no LLM: facts, guardrails and the options this customer may be shown."""
+    user = _user_or_404(user_id)
+    if user.get("source") != "toyota_pack":
+        raise HTTPException(status_code=400, detail="Not a Toyota demo customer. Use ids like TY-C001 (see /demo-users).")
+    return toyota.next_move_options(user)
+
+
 @app.get("/health/{user_id}")
 def health(user_id: str):
     user = _user_or_404(user_id)
+    if user.get("source") == "toyota_pack":
+        raise HTTPException(status_code=400, detail="Toyota demo customers only have vehicle-finance data. "
+                                                    f"Use /next-move/{user_id}.")
     return {"user_id": user_id, "name": user["name"], "data_source": user.get("source", "form"),
             "indicators": finance.health_indicators(user)}
 
