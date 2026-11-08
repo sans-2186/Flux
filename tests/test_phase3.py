@@ -158,6 +158,29 @@ def test_speak_discovers_a_working_tts_model_when_configured_ones_are_unavailabl
     assert "new-tts" in paths[-1] and "old-tts" not in paths[-1]
 
 
+def test_speak_audio_endpoint_returns_a_wav_file(monkeypatch):
+    fake = FakeServer(lambda path, body: audio_reply()).connect(monkeypatch)
+    try:
+        r = client.post("/speak/audio", json={"text": "hi"})
+    finally:
+        fake.close()
+    assert r.status_code == 200 and r.headers["content-type"] == "audio/wav"
+    assert r.headers["x-flux-source"].startswith("gemini_tts:")
+    with wave.open(io.BytesIO(r.content)) as w:
+        assert w.getnframes() == 480
+
+
+def test_speak_audio_endpoint_falls_back_to_json_without_a_key():
+    r = client.post("/speak/audio", json={"text": "hi"})
+    assert r.status_code == 200 and r.json()["source"] == "browser_speech"
+
+
+def test_speak_demo_page_is_served():
+    r = client.get("/speak-demo")
+    assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+    assert "speechSynthesis" in r.text and "/speak" in r.text
+
+
 def test_speak_validation():
     assert client.post("/speak", json={"text": ""}).status_code == 422
 

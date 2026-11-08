@@ -87,6 +87,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 |---|---|
 | `app/main.py` | FastAPI app and endpoints: `GET /`, `GET /demo-users`, `POST /onboard`, `GET /health/{id}`, `GET /next-move/{id}`, `POST /chat`; CORS open |
 | `app/voice.py` | `/speak`: Gemini TTS (16-bit 24 kHz PCM wrapped into WAV), model fallback chain, browser-speech fallback; strips markdown before speaking |
+| `app/speak_demo.html` | One-page voice test served at `/speak-demo`: text box, voice picker, Speak button; plays Gemini audio or the browser's voice |
 | `app/fraud.py` | Phase 3: transaction flag rules (large amount, new merchant, foreign, odd hour), severity, alert store, Gemini plain-language explanation with fixed-text fallback |
 | `app/handoff.py` | Phase 3: who/what/why/next-step summary for a human agent (plain Python, no LLM) |
 | `mock/merchants.json` | **MOCK**: typical merchants per spending category (PNC's data has no merchant names) |
@@ -159,7 +160,9 @@ curl http://localhost:8000/health/C002
 Thresholds are PNC's: savings rate good >= 20%, ok >= 10%; debt-to-income good <= 20%, ok <= 36%; emergency fund good >= 6 months, ok >= 3; credit utilization good <= 10%, ok <= 30%. PNC's `watch` label is shown as `ok`.
 
 ### `POST /speak`
-Body `{"text": str, "voice": str | null}` (voice default `Kore`). Always HTTP 200.
+Body `{"text": str, "voice": str | null}`. `voice` is optional (default `Kore`, or `GEMINI_TTS_VOICE` in `.env`); other Gemini voices include `Puck`, `Charon`, `Aoede`, `Zephyr`, `Fenrir`, `Leda`, `Orus`. An unsupported voice name makes Gemini reject the call, so `/speak` returns the browser-speech fallback with the error. Always HTTP 200.
+
+**You cannot hear `/speak` in the `/docs` page**: it returns the audio as a long base64 text string, which Swagger only prints. To listen: open **http://localhost:8000/speak-demo** (type text, press Speak; falls back to the browser's voice and shows why), or call `POST /speak/audio`, which returns the `.wav` file itself (use Swagger's Download file link, or `curl -s -X POST localhost:8000/speak/audio -H 'Content-Type: application/json' -d '{"text":"Hi Maya"}' -o out.wav` then open `out.wav`).
 ```bash
 curl -s -X POST localhost:8000/speak -H 'Content-Type: application/json' -d '{"text":"Hi Maya, you are on track."}'
 # {"audio_base64":"UklGRi...","mime_type":"audio/wav","source":"gemini_tts:gemini-2.5-flash-preview-tts","text":"Hi Maya, you are on track."}
@@ -297,7 +300,7 @@ Gemini is **not** fine-tuned. Fine-tuning would not make numbers reliable and is
 # paste GEMINI_API_KEY into .env
 source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000     # interactive docs: http://localhost:8000/docs
-python -m pytest -q              # 146 tests, no API key needed
+python -m pytest -q              # 149 tests, no API key needed
 ```
 Use a second terminal for curl. After editing `.env`, restart uvicorn.
 

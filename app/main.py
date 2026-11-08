@@ -1,9 +1,12 @@
 """Flux API. Run: uvicorn app.main:app --reload"""
+import base64
 from datetime import datetime
+from pathlib import Path as FilePath
 from typing import List, Optional
 
 from fastapi import Body, FastAPI, HTTPException, Path
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from app import agent, finance, fraud, handoff, llm, mockdata, store, toyota, voice
@@ -55,7 +58,8 @@ class OnboardRequest(BaseModel):
 
 class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
-    voice: Optional[str] = None
+    voice: Optional[str] = Field(default=None, description="Optional Gemini voice name, e.g. Kore (default), Puck, "
+                                 "Charon, Aoede, Zephyr, Fenrir, Leda, Orus. Leave out to use the default.")
 
 
 class TransactionRequest(BaseModel):
@@ -108,7 +112,12 @@ HANDOFF_EXAMPLES = {
     "toyota": {"summary": "Toyota hardship customer", "value": {"user_id": "TY-C014"}},
     "pnc": {"summary": "PNC customer with a reason", "value": {"user_id": "C002", "reason": "Wants to dispute a charge"}},
 }
-SPEAK_EXAMPLES = {"hello": {"summary": "Short line", "value": {"text": "Hi Maya, you are on track."}}}
+SPEAK_EXAMPLES = {
+    "default": {"summary": "Default voice (Kore)", "value": {"text": "Hi Maya, you are on track."}},
+    "puck": {"summary": "Voice: Puck (upbeat)", "value": {"text": "Hi Maya, you are on track.", "voice": "Puck"}},
+    "charon": {"summary": "Voice: Charon (informative)", "value": {"text": "Hi Maya, you are on track.", "voice": "Charon"}},
+    "aoede": {"summary": "Voice: Aoede (breezy)", "value": {"text": "Hi Maya, you are on track.", "voice": "Aoede"}},
+}
 ONBOARD_EXAMPLES = {"sam": {"summary": "Sam", "value": {
     "name": "Sam", "age": 22, "monthly_income": 3200, "monthly_expenses": 2100, "savings": 3500,
     "debts": [{"name": "student loan", "balance": 14000, "monthly_payment": 180}],
@@ -211,3 +220,20 @@ def alerts(user_id: str = PATH_USER, explain: bool = True):
 def handoff_summary(req: HandoffRequest = Body(openapi_examples=HANDOFF_EXAMPLES)):
     """Who / what / why / next step summary for a human agent. Plain Python, no LLM."""
     return handoff.build(_user_or_404(req.user_id), req.reason, req.conversation)
+
+
+@app.post("/speak/audio", responses={200: {"content": {"audio/wav": {}}}})
+def speak_audio(req: SpeakRequest = Body(openapi_examples=SPEAK_EXAMPLES)):
+    """Same as /speak but returns the audio file itself (audio/wav) so a browser or Swagger can play or
+    download it. If TTS is unavailable the response is the same JSON as /speak (source "browser_speech")."""
+    result = voice.speak(req.text, req.voice)
+    if not result["audio_base64"]:
+        return result
+    return Response(content=base64.b64decode(result["audio_base64"]), media_type="audio/wav",
+                    headers={"X-Flux-Source": result["source"]})
+
+
+@app.get("/speak-demo", response_class=HTMLResponse, include_in_schema=False)
+def speak_demo():
+    """A tiny page with a Speak button: plays Gemini TTS audio, or falls back to the browser's voice."""
+    return (FilePath(__file__).parent / "speak_demo.html").read_text(encoding="utf-8")
