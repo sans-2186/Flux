@@ -38,6 +38,17 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - Companion uses the same `/chat` coach (`askCoach`) with car/loan context for affordability and purchase-impact questions.
 - Vehicle matches (current / cheaper / higher) update the snapshot; loan assumptions stay editable.
 
+## Vercel deployment (services)
+
+- `vercel.json` declares two services: **`app`** (FastAPI, repo root) and **`ui`** (Next.js, `ui/`).
+- Public routing: `/api/flux/*` → `app`, catch-all `/(.*)` → `ui`. Both are public because the browser and the Chrome extension call the backend directly.
+- `ui` declares a binding to `app` (`FLUX_APP_URL`) for server-side calls; today all backend calls are client-side and go through the `/api/flux` rewrite.
+- `StripPrefix` middleware in `app/main.py` serves every route bare (local uvicorn) and under `FLUX_API_PREFIX` (default `/api/flux`), so no route definitions changed.
+- `main.py` at the repo root re-exports the app for Vercel's FastAPI runtime; `store._path()` falls back to `/tmp/flux-users.json` when `VERCEL` is set.
+- The UI picks its backend base automatically: `localhost:8000` when served from localhost, `/api/flux` otherwise. `NEXT_PUBLIC_FLUX_BACKEND_URL` still overrides.
+- The extension tries `127.0.0.1:8000` first and falls back to `https://myflux.us/api/flux`.
+- **Still required before a deploy succeeds:** Payload needs `PAYLOAD_SECRET` and a hosted database for `ui`'s `payload build`, and `app` needs `GEMINI_API_KEY` in Vercel's environment variables.
+
 ## Saved checkpoints
 
 Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished phase also gets a git tag.

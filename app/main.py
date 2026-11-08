@@ -1,5 +1,6 @@
 """Flux API. Run: uvicorn app.main:app --reload"""
 import base64
+import os
 from datetime import datetime
 from pathlib import Path as FilePath
 from typing import List, Optional
@@ -11,8 +12,30 @@ from pydantic import BaseModel, Field, field_validator
 
 from app import agent, companion, finance, fraud, handoff, llm, matchdemo, mockdata, store, toyota, voice
 
+# On Vercel the public rewrite forwards the whole path, so /api/flux/chat has to reach /chat.
+API_PREFIX = os.getenv("FLUX_API_PREFIX", "/api/flux").rstrip("/")
+
+
+class StripPrefix:
+    """Serve every route both bare (local uvicorn) and under the public prefix (Vercel)."""
+
+    def __init__(self, app, prefix: str):
+        self.app = app
+        self.prefix = prefix
+
+    async def __call__(self, scope, receive, send):
+        if self.prefix and scope.get("type") in ("http", "websocket"):
+            path = scope.get("path", "")
+            if path == self.prefix or path.startswith(self.prefix + "/"):
+                scope = dict(scope)
+                scope["path"] = path[len(self.prefix):] or "/"
+                scope["root_path"] = self.prefix
+        await self.app(scope, receive, send)
+
+
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(StripPrefix, prefix=API_PREFIX)
 
 
 class ChatRequest(BaseModel):

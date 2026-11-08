@@ -2,7 +2,20 @@ import type { FinancialProfile, FinancialSnapshot } from './flux-api-client'
 
 // Flux Python backend (FastAPI). Run it with: uvicorn app.main:app --port 8000
 // Override in .env.local:  NEXT_PUBLIC_FLUX_BACKEND_URL=http://localhost:8000
-const BASE = (process.env.NEXT_PUBLIC_FLUX_BACKEND_URL || 'http://localhost:8000').replace(/\/+$/, '')
+// On Vercel the backend is the `app` service behind the /api/flux rewrite, so a same-origin
+// relative base is correct there and no environment variable is needed.
+const DEPLOYED_BASE = '/api/flux'
+
+function resolveBase(): string {
+  const configured = process.env.NEXT_PUBLIC_FLUX_BACKEND_URL
+  if (configured) return configured.replace(/\/+$/, '')
+  if (typeof window === 'undefined') return DEPLOYED_BASE
+  const host = window.location.hostname
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+  return isLocal ? 'http://localhost:8000' : DEPLOYED_BASE
+}
+
+const BASE = resolveBase()
 // Optional: skip onboarding and always use one backend demo customer (C001..C030, TY-C001..TY-C020).
 const FIXED_USER = process.env.NEXT_PUBLIC_FLUX_USER_ID || ''
 const STORAGE_KEY = 'flux-backend-user'

@@ -221,6 +221,13 @@ def test_transcribe_without_key_does_not_500(monkeypatch):
     assert body["transcript"] is None and body["source"] == "none"
 
 
+def test_routes_answer_bare_and_under_the_public_vercel_prefix():
+    assert client.get("/demo-users").status_code == 200
+    assert client.get("/api/flux/demo-users").status_code == 200
+    assert client.get("/api/flux/").status_code == 200
+    assert client.get("/api/other/demo-users").status_code == 404
+
+
 def test_audio_mime_is_normalised_to_something_gemini_accepts():
     assert voice._audio_mime("audio/webm;codecs=opus") == "audio/wav"
     assert voice._audio_mime("audio/wav") == "audio/wav"
