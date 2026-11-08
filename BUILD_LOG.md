@@ -4,6 +4,15 @@ Voice-first AI money coach for Gen Z (HackUTD: PNC 360° Financial Health Naviga
 
 Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/health`, Gemini tools, personalized `/chat`), now **grounded on PNC's mock dataset** (no hidden assumptions, see "How the agent uses the mock data"). **Toyota track added** (vehicle finances, from Toyota's "Next Move" data pack: `/next-move`). **Voice `/speak` done.** **Phase 3 done** (`/transactions`, `/alerts/{id}`, `/handoff`). All phases are built; what remains is testing with a real Gemini key.
 
+
+## UI functional fixes (onboarding → finances, chat/Listen latency)
+
+- Demo onboarding money step edits **checking, savings, debt, income** and rebuilds the live `snapshot` used by Home / My Finances / AI context.
+- Demo API client keeps an in-memory profile+snapshot so Payload-less demo mode no longer resets balances to mocks.
+- `POST /onboard` from the UI sends **liquid cash = checking + savings**, plus debt balances/payments derived from the money step.
+- New coach tool `money_overview` (one-shot balances/surplus). Gemini thinking budget defaults to `0` for faster replies (`GEMINI_THINKING_BUDGET` to override).
+- Listen / voice replies use the browser `speechSynthesis` path by default (Gemini TTS was multi-second delay).
+
 ## Saved checkpoints
 
 Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished phase also gets a git tag.

@@ -18,7 +18,7 @@ import {
   type ScenarioResult,
   type OnboardingStep,
 } from './flux-api-client'
-import { askCoach, speakReply, stopSpeaking } from './flux-backend'
+import { askCoach, getBackendUserId, speakReply, stopSpeaking } from './flux-backend'
 
 const fluxLogo = '/flux-logo.png'
 
@@ -50,7 +50,7 @@ type SimulatorData = ScenarioInput
 const initialFinance = MOCK_PROFILE
 const initialSimulator = MOCK_SCENARIO
 
-const screenOrder: Screen[] = ['welcome', 'goal', 'motivation', 'summary', 'home']
+const screenOrder: Screen[] = ['welcome', 'goal', 'motivation', 'snapshot', 'summary', 'home']
 
 const screenForOnboardingStep: Record<OnboardingStep, Screen> = {
   overview: 'welcome',
@@ -563,35 +563,116 @@ function App() {
       }
     }
   }
+  const rebuildSnapshot = (
+    nextFinance: FinanceProfile,
+    checkingBalance: number,
+    debtBalance: number,
+  ): FinancialSnapshot => {
+    const accounts: FinancialSnapshot['accounts'] = [
+      {
+        id: 'checking-1',
+        name: 'Everyday Checking',
+        type: 'checking',
+        balance: Math.max(checkingBalance, 0),
+      },
+      {
+        id: 'savings-1',
+        name: 'Goal Savings',
+        type: 'savings',
+        balance: Math.max(nextFinance.savings, 0),
+      },
+      {
+        id: 'card-1',
+        name: 'Core Visa',
+        type: 'credit-card',
+        balance: Math.max(debtBalance * 0.15, 0),
+        monthlyPayment: Math.max(nextFinance.debt * 0.3, 0),
+      },
+      {
+        id: 'loan-1',
+        name: 'Personal Loan',
+        type: 'loan',
+        balance: Math.max(debtBalance * 0.85, 0),
+        monthlyPayment: Math.max(nextFinance.debt * 0.7, 0),
+      },
+      {
+        id: 'investment-1',
+        name: 'CD & IRA',
+        type: 'investment',
+        balance: Math.max(MOCK_SNAPSHOT.investments, 0),
+      },
+    ]
+    const availableCash = accounts
+      .filter((account) => ['checking', 'savings'].includes(account.type))
+      .reduce((total, account) => total + account.balance, 0)
+    const investments = accounts
+      .filter((account) => account.type === 'investment')
+      .reduce((total, account) => total + account.balance, 0)
+    const totalDebt = accounts
+      .filter((account) => ['credit-card', 'loan'].includes(account.type))
+      .reduce((total, account) => total + account.balance, 0)
+    const totalCash = availableCash + investments
+    return {
+      accounts,
+      obligations: [
+        { id: 'rent', name: 'Rent / housing', amount: nextFinance.housing, dueInDays: 5 },
+        {
+          id: 'card',
+          name: 'Credit card',
+          amount: Math.max(nextFinance.debt * 0.3, 0),
+          dueInDays: 8,
+        },
+        {
+          id: 'loan',
+          name: 'Loan payment',
+          amount: Math.max(nextFinance.debt * 0.7, 0),
+          dueInDays: 12,
+        },
+      ],
+      availableCash,
+      investments,
+      totalCash,
+      totalDebt,
+      monthlyObligations: nextFinance.debt,
+      netPosition: totalCash - totalDebt,
+    }
+  }
+  const pushDemoSnapshot = (nextFinance: FinanceProfile, nextSnapshot: FinancialSnapshot) => {
+    if (demoMode) api.syncDemoSnapshot(nextFinance, nextSnapshot)
+  }
   const updateFinance = (key: keyof FinanceProfile, value: number) => {
     profileTouchedRef.current = true
-    setFinance((current) => ({ ...current, [key]: value }))
-    if (key === 'savings' || key === 'debt') {
-      setSnapshot((current) => {
-        const accounts =
-          key === 'savings'
-            ? current.accounts.map((account) =>
-                account.type === 'savings' ? { ...account, balance: value } : account,
-              )
-            : current.accounts
-        const totalCash = accounts
-          .filter((account) => ['checking', 'savings', 'investment'].includes(account.type))
-          .reduce((total, account) => total + account.balance, 0)
-        return {
-          ...current,
-          accounts,
-          availableCash: accounts
-            .filter((account) => ['checking', 'savings'].includes(account.type))
-            .reduce((total, account) => total + account.balance, 0),
-          investments: accounts
-            .filter((account) => account.type === 'investment')
-            .reduce((total, account) => total + account.balance, 0),
-          totalCash,
-          monthlyObligations: key === 'debt' ? value : current.monthlyObligations,
-          netPosition: totalCash - current.totalDebt,
-        }
+    setFinance((current) => {
+      const nextFinance = { ...current, [key]: value }
+      setSnapshot((snap) => {
+        const checking = snap.accounts.find((account) => account.type === 'checking')?.balance ?? 0
+        const debtBalance = snap.totalDebt
+        const rebuilt = rebuildSnapshot(nextFinance, checking, debtBalance)
+        pushDemoSnapshot(nextFinance, rebuilt)
+        return rebuilt
       })
-    }
+      return nextFinance
+    })
+  }
+  const updateChecking = (value: number) => {
+    profileTouchedRef.current = true
+    setSnapshot((snap) => {
+      const rebuilt = rebuildSnapshot(finance, value, snap.totalDebt)
+      pushDemoSnapshot(finance, rebuilt)
+      return rebuilt
+    })
+  }
+  const updateDebtBalance = (value: number) => {
+    profileTouchedRef.current = true
+    setSnapshot((snap) => {
+      const rebuilt = rebuildSnapshot(
+        finance,
+        snap.accounts.find((account) => account.type === 'checking')?.balance ?? 0,
+        value,
+      )
+      pushDemoSnapshot(finance, rebuilt)
+      return rebuilt
+    })
   }
   const updateSim = (
     key: 'price' | 'down' | 'term' | 'apr' | 'insurance' | 'running' | 'fees',
@@ -686,16 +767,26 @@ function App() {
   useEffect(() => {
     if (!hasLoadedApi) return
     const timeout = window.setTimeout(() => {
+      const checking = snapshot.accounts.find((a) => a.type === 'checking')?.balance ?? 0
       void api
-        .updateFinancialProfile(finance)
-        .then(() => api.getFinancialSnapshot())
-        .then((updatedSnapshot) => setSnapshot(updatedSnapshot))
+        .updateFinancialProfile({
+          ...finance,
+          ...(demoMode ? { _checking: checking, _debtBalance: snapshot.totalDebt } : {}),
+        } as FinancialProfile)
+        .then(() => (demoMode ? Promise.resolve(null) : api.getFinancialSnapshot()))
+        .then((updatedSnapshot) => {
+          // Demo: React snapshot is source of truth — do not clobber edits from the API mock.
+          if (updatedSnapshot && !profileTouchedRef.current) setSnapshot(updatedSnapshot)
+          else if (updatedSnapshot && !demoMode) setSnapshot(updatedSnapshot)
+        })
         .catch((error) => {
           setApiError(error instanceof Error ? error.message : 'Unable to update the profile.')
         })
     }, 500)
     return () => window.clearTimeout(timeout)
-  }, [finance, hasLoadedApi])
+    // snapshot intentionally omitted from deps: finance edits already rebuild snapshot in helpers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finance, hasLoadedApi, demoMode])
 
   useEffect(() => {
     if (!hasLoadedApi) return
@@ -771,6 +862,7 @@ function App() {
     setApiLoading(true)
     setApiError('')
     try {
+      const checking = snapshot.accounts.find((a) => a.type === 'checking')?.balance ?? 0
       const updatedProfile = await api.updateFinancialProfile({
         ...finance,
         goal,
@@ -779,8 +871,12 @@ function App() {
         motivation,
         concern,
         guidance,
-      })
-      const updatedSnapshot = await api.getFinancialSnapshot()
+        ...(demoMode ? { _checking: checking, _debtBalance: snapshot.totalDebt } : {}),
+      } as FinancialProfile)
+      const updatedSnapshot = demoMode
+        ? rebuildSnapshot(updatedProfile, checking, snapshot.totalDebt)
+        : await api.getFinancialSnapshot()
+      if (demoMode) api.syncDemoSnapshot(updatedProfile, updatedSnapshot)
       setFinance(updatedProfile)
       setSelectedGoals(goal ? [goal] : [])
       setSnapshot(updatedSnapshot)
@@ -802,13 +898,20 @@ function App() {
     const selectedGoal = resolvedGoals[0] ?? ''
     const selectedFocus = understandingFocuses[0] ?? ''
     try {
+      const checking = snapshot.accounts.find((a) => a.type === 'checking')?.balance ?? 0
       const updatedProfile = await api.updateFinancialProfile({
         ...finance,
         goal: selectedGoal,
         goals: resolvedGoals,
         understandingFocus: selectedFocus,
         understandingFocuses,
-      })
+        ...(demoMode ? { _checking: checking, _debtBalance: snapshot.totalDebt } : {}),
+      } as FinancialProfile)
+      if (demoMode) {
+        const rebuilt = rebuildSnapshot(updatedProfile, checking, snapshot.totalDebt)
+        api.syncDemoSnapshot(updatedProfile, rebuilt)
+        setSnapshot(rebuilt)
+      }
       setFinance(updatedProfile)
       if (authUser) {
         await api.saveOnboardingStep('complete')
@@ -829,6 +932,18 @@ function App() {
       setUnderstandingFocus(selectedFocus)
       setApiLoading(false)
       go('home')
+      // Warm the backend user now so the first chat is not waiting on /onboard.
+      void getBackendUserId(
+        {
+          ...finance,
+          goal: selectedGoal,
+          goals: resolvedGoals,
+          understandingFocus: selectedFocus,
+          understandingFocuses,
+        },
+        snapshot,
+        authUser?.fullName,
+      ).catch(() => undefined)
     }
   }
   const showToast = (text: string) => {
@@ -936,8 +1051,16 @@ function App() {
     return response
   }
   // Facts from the screen the user is looking at; sent with the question so the coach can use them.
-  const screenContext = () =>
-    `(The user is looking at a car scenario in the app: price ${money(sim.price)}, down payment ${money(sim.down)}, ${sim.term} months at ${sim.apr}% APR.)`
+  const screenContext = () => {
+    const checking = snapshot.accounts.find((a) => a.type === 'checking')?.balance ?? 0
+    return (
+      `(User money on file from onboarding — use tools to confirm before quoting: ` +
+      `take-home ${money(finance.income)}/mo, housing ${money(finance.housing)}, other expenses ${money(finance.expenses)}, ` +
+      `debt payments ${money(finance.debt)}/mo, checking ${money(checking)}, savings ${money(finance.savings)}, ` +
+      `total debt balance ${money(snapshot.totalDebt)}. ` +
+      `Car scenario on screen: price ${money(sim.price)}, down ${money(sim.down)}, ${sim.term} mo at ${sim.apr}% APR.)`
+    )
+  }
   const sendPrompt = async (prompt: string) => {
     stopSpeaking()
     const viaVoice = lastInputWasVoiceRef.current
@@ -956,7 +1079,8 @@ function App() {
       text = localReply(prompt)
     }
     setChat((c) => c.map((m) => (m.id === id ? { from: 'ai', text } : m)))
-    if (viaVoice) void speakReply(text)
+    // Browser speech is immediate; Gemini TTS adds multi-second delay after every reply.
+    if (viaVoice) void speakReply(text, { preferBrowser: true })
   }
   const submitChat = (e: FormEvent) => {
     e.preventDefault()
@@ -1255,7 +1379,7 @@ function App() {
       >
         <Header
           step={1}
-          totalSteps={4}
+          totalSteps={5}
           action={demoMode ? <span className="demo-mode-badge">Demo mode</span> : undefined}
         />
         <SectionTitle
@@ -1341,8 +1465,8 @@ function App() {
           </div>
         </section>
         <p className="onboarding-data-note">
-          <Icon name="shield" size={16} /> Balances are stored mock account data. Income and
-          recurring costs are profile assumptions, not transaction-derived.
+          <Icon name="shield" size={16} /> Starting from example balances. On the money step you
+          can edit checking, savings, income, and debt — Home and My Finances will follow.
         </p>
       </Page>
     )
@@ -1377,7 +1501,7 @@ function App() {
           </div>
         }
       >
-        <Header onBack={back} step={2} totalSteps={4} />
+        <Header onBack={back} step={2} totalSteps={5} />
         <SectionTitle
           eyebrow="Optional"
           title="What would you like to understand first?"
@@ -1470,7 +1594,7 @@ function App() {
           </Button>
         }
       >
-        <Header onBack={back} step={3} totalSteps={4} />
+        <Header onBack={back} step={3} totalSteps={5} />
         <SectionTitle
           eyebrow="Optional"
           title="What goals do you have in mind?"
@@ -1594,6 +1718,8 @@ function App() {
               variant="ghost"
               onClick={() => {
                 setFinance(initialFinance)
+                setSnapshot(MOCK_SNAPSHOT)
+                if (demoMode) api.syncDemoSnapshot(initialFinance, MOCK_SNAPSHOT)
                 next()
               }}
             >
@@ -1602,10 +1728,10 @@ function App() {
           </div>
         }
       >
-        <Header onBack={back} step={5} />
+        <Header onBack={back} step={4} totalSteps={5} />
         <SectionTitle
           title="Let’s understand where you are today."
-          body="A few estimates can help us make your plan more realistic. You don’t need exact numbers."
+          body="Edit these estimates — they update My Finances, Home, and what Flux AI uses. You don’t need exact numbers."
         />
         <div className="form-card">
           <CurrencyInput
@@ -1624,9 +1750,19 @@ function App() {
             onChange={(v) => updateFinance('expenses', v)}
           />
           <CurrencyInput
-            label="Current savings"
+            label="Checking balance"
+            value={snapshot.accounts.find((account) => account.type === 'checking')?.balance ?? 0}
+            onChange={updateChecking}
+          />
+          <CurrencyInput
+            label="Savings balance"
             value={finance.savings}
             onChange={(v) => updateFinance('savings', v)}
+          />
+          <CurrencyInput
+            label="Total debt balance (cards + loans)"
+            value={snapshot.totalDebt}
+            onChange={updateDebtBalance}
           />
           <CurrencyInput
             label="Existing monthly debt payments"
@@ -1691,7 +1827,7 @@ function App() {
           </Button>
         }
       >
-        <Header onBack={back} step={4} totalSteps={4} />
+        <Header onBack={back} step={5} totalSteps={5} />
         <SectionTitle
           eyebrow="Your first insight"
           title="Here’s what stands out."
@@ -1900,7 +2036,7 @@ function App() {
                     type="button"
                     className="listen-button"
                     aria-label="Listen to this reply"
-                    onClick={() => void speakReply(message.text)}
+                    onClick={() => void speakReply(message.text, { preferBrowser: true })}
                   >
                     Listen
                   </button>
@@ -2833,7 +2969,7 @@ function App() {
               </span>
               <div>
                 <strong>Rent is the next large obligation</strong>
-                <p>Your example $900 rent payment is due in five days.</p>
+                <p>Your housing payment of {money(finance.housing)} is due in five days.</p>
                 <button
                   onClick={() => {
                     setWeeklyOpen(false)

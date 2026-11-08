@@ -15,7 +15,7 @@ log = logging.getLogger("flux.llm")
 # Primary: quality. Plan B (fallbacks): lite models when the primary is busy or erroring.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 # Thinking models count their hidden reasoning against this cap, so keep it generous.
-MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
+MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "512"))
 DISCLAIMER = "Not financial advice - just education to help you decide."
 
 EDUCATION_PROMPT = (
@@ -77,10 +77,13 @@ def _generate_config(system: str, tools=None):
         max_output_tokens=MAX_OUTPUT_TOKENS,
         tools=tools,
     )
-    # Opt-in only (e.g. GEMINI_THINKING_BUDGET=0): not every 3.x model accepts it.
-    budget = os.getenv("GEMINI_THINKING_BUDGET")
-    if budget not in (None, ""):
-        cfg.thinking_config = types.ThinkingConfig(thinking_budget=int(budget))
+    # Default 0 = fastest replies. Set GEMINI_THINKING_BUDGET to raise it, or "off" to skip.
+    budget = os.getenv("GEMINI_THINKING_BUDGET", "0")
+    if budget.lower() not in ("", "off", "none"):
+        try:
+            cfg.thinking_config = types.ThinkingConfig(thinking_budget=int(budget))
+        except Exception:
+            pass
     return cfg
 
 

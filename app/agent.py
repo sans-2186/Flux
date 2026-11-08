@@ -9,7 +9,7 @@ from app import finance, llm, toyota
 COACH_PROMPT = (
     "You are Flux, a friendly voice-first money coach for Gen Z, talking to {name}. "
     "You know NOTHING about their money except what the tools return. "
-    "For any question about their finances, call the right tool first, then explain the result. "
+    "For any question about their finances, call money_overview first (or the more specific tool), then explain the result. "
     "Never do arithmetic yourself and never invent or assume numbers: only quote numbers from tool results. "
     "If a tool reports missing_inputs, ask the user for exactly those values and stop; do not guess them. "
     "Use tool results to give a clear yes or no when they ask for one. "
@@ -60,6 +60,13 @@ def make_tools(user: dict, trace: list):
     """Build the tool functions Gemini may call. Docstrings become the tool descriptions."""
     if user.get("source") == "toyota_pack":
         return make_toyota_tools(user, trace)
+
+    def money_overview() -> dict:
+        """Get the user's onboarding money snapshot in one call: income, expenses, debt payments,
+        liquid cash (checking + savings), debt balances, monthly surplus, emergency-fund months,
+        and goals. Call this first for any question about their balances or budget."""
+        trace.append("money_overview")
+        return finance.money_overview(user)
 
     def can_afford(price: float) -> dict:
         """Check if the user can afford a one-time purchase. Returns yes/no (affordable), the reason,
@@ -115,7 +122,7 @@ def make_tools(user: dict, trace: list):
         trace.append("health_check")
         return {"indicators": finance.health_indicators(user)}
 
-    return [can_afford, retirement_check, forecast_balances, what_if, trade_in_check,
+    return [money_overview, can_afford, retirement_check, forecast_balances, what_if, trade_in_check,
             spending_breakdown, health_check]
 
 

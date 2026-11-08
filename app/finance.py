@@ -112,6 +112,32 @@ def health_indicators(user):
     return out
 
 
+def money_overview(user):
+    """One-shot snapshot of the numbers the user typed at onboarding (plus derived surplus).
+
+    liquid_cash is checking + savings as sent by the app (backend field name: savings).
+    """
+    debt_pay = monthly_debt_payments(user)
+    surplus = monthly_surplus(user)
+    obligations = user["monthly_expenses"] + debt_pay
+    return {
+        "name": user.get("name"),
+        "monthly_income": _r(user["monthly_income"]),
+        "monthly_expenses": _r(user["monthly_expenses"]),
+        "monthly_debt_payments": _r(debt_pay),
+        "liquid_cash": _r(user["savings"]),
+        "credit_card_balance": _r(user.get("credit_card_balance", 0)),
+        "total_debt_balances": _r(
+            user.get("credit_card_balance", 0)
+            + sum(d.get("balance", 0) for d in user.get("debts", []))
+            + (user.get("vehicle", {}) or {}).get("loan_balance", 0)
+        ),
+        "monthly_surplus": _r(surplus),
+        "emergency_fund_months": _r(user["savings"] / obligations) if obligations else None,
+        "goals": user.get("goals") or [],
+    }
+
+
 def can_afford(user, price):
     """Yes/no for a one-time purchase, plus impact on the monthly budget and emergency fund."""
     obligations = user["monthly_expenses"] + monthly_debt_payments(user)
