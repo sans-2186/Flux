@@ -30,6 +30,22 @@ works even though the Toyota page is HTTPS. Deploying the backend to a public UR
 you want the extension to work on a machine that is not running uvicorn locally; in that case
 change `BASE` in `background.js` and add the host to `host_permissions`.
 
+## If toyota.com returns 403
+
+That is Toyota's Akamai bot protection rejecting your browser or network, not Flux. The page
+loads fine from most connections; a VPN, a corporate/campus network, or an aggressive blocker
+will trip it. Things that help, in order of effort:
+
+- Open the Toyota page in a normal window first (type `toyota.com` yourself and click Camry). Once
+  Akamai sets its cookies, the Flux-opened tab usually loads.
+- Turn off the VPN or switch networks (phone hotspot works).
+- Try a different vehicle page, e.g. `https://www.toyota.com/corolla`.
+- Fall back to **Open companion in Flux** on the compare card, which shows the same panel inside
+  the app with no external site involved.
+
+The content script also runs on Toyota's 403 page, so the Flux panel still appears there using the
+saved session numbers — it just has no listing price to read.
+
 ## Notes
 
 - Toyota 301-redirects query strings away, so Flux passes the compare path in the URL **hash**

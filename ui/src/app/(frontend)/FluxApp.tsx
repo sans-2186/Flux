@@ -1018,6 +1018,7 @@ function App() {
     option: 'buy-now' | 'wait' | 'cheaper',
     optionLabel: string,
     scenario: SimulatorData,
+    stayInFlux = false,
   ) => {
     setSim(scenario)
     setCompanionStartIndex(option === 'cheaper' ? 1 : 0)
@@ -1045,14 +1046,19 @@ function App() {
     } catch {
       // Toyota tab still opens; the extension uses defaults if the session is missing.
     }
+    if (stayInFlux) {
+      go('extension')
+      return
+    }
+    // Toyota's edge rejects some requests that carry a referrer, so open the tab without one.
     const target = `${TOYOTA_VEHICLE_URLS[option]}#flux_option=${option}`
-    const opened = window.open(target, `flux-toyota-${option}`)
+    const opened = window.open(target, '_blank', 'noopener,noreferrer')
     if (!opened) {
       go('extension')
       showToast('Popup blocked — showing the companion in Flux.')
       return
     }
-    showToast('Toyota page opened. The Flux companion pops up there with this path’s numbers.')
+    showToast('Toyota page opened. If Toyota blocks it, use “Open companion in Flux”.')
   }
 
   const handleSignup = async (event: FormEvent) => {
@@ -3507,8 +3513,14 @@ function App() {
                     >
                       Open companion on Toyota
                     </Button>
-                    <Button variant="ghost" onClick={() => go('ai')}>
-                      Ask Flux to Explain
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        const option = i === 0 ? 'buy-now' : i === 1 ? 'wait' : 'cheaper'
+                        void openShoppingCompanion(option, scenario.name, comparison.input, true)
+                      }}
+                    >
+                      Open companion in Flux
                     </Button>
                   </div>
                 </article>
