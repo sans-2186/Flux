@@ -32,10 +32,11 @@ import {
 } from './flux-backend'
 
 // Real Toyota vehicle pages the companion analyses in context (one per compare path).
+// No trailing slash and no query string: Toyota 301-redirects both away, so the path rides in the hash.
 const TOYOTA_VEHICLE_URLS: Record<'buy-now' | 'wait' | 'cheaper', string> = {
-  'buy-now': 'https://www.toyota.com/corolla/',
-  wait: 'https://www.toyota.com/corolla/',
-  cheaper: 'https://www.toyota.com/corollahatchback/',
+  'buy-now': 'https://www.toyota.com/camry',
+  wait: 'https://www.toyota.com/corolla',
+  cheaper: 'https://www.toyota.com/corollahatchback',
 }
 import { FinancialCompanion } from './FinancialCompanion'
 
@@ -1044,8 +1045,8 @@ function App() {
     } catch {
       // Toyota tab still opens; the extension uses defaults if the session is missing.
     }
-    const target = `${TOYOTA_VEHICLE_URLS[option]}?flux_option=${option}`
-    const opened = window.open(target, 'flux-toyota')
+    const target = `${TOYOTA_VEHICLE_URLS[option]}#flux_option=${option}`
+    const opened = window.open(target, `flux-toyota-${option}`)
     if (!opened) {
       go('extension')
       showToast('Popup blocked — showing the companion in Flux.')
@@ -1251,7 +1252,7 @@ function App() {
           spoken = result.transcript || ''
           if (!spoken) {
             failureReason = result.reason
-              ? `Could not transcribe: ${result.reason}`
+              ? `${result.reason}. Type your question, or try the mic again.`
               : 'No speech was detected in the recording.'
           }
         }
@@ -1282,7 +1283,9 @@ function App() {
 
   const toggleVoiceInput = async () => {
     if (isListening || voicePhase === 'recording') {
-      recognitionRef.current?.stop()
+      const recognition = recognitionRef.current
+      recognitionRef.current = null
+      recognition?.stop()
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop()
       } else {
@@ -1372,7 +1375,18 @@ function App() {
     recognition.onerror = () => {
       recognitionRef.current = null
     }
+    // Chrome ends recognition after a pause; restart it while the recorder is still running so the
+    // browser transcript stays the primary path and Gemini is only a fallback.
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        try {
+          recognition.start()
+          return
+        } catch {
+          /* fall through to clearing the handle */
+        }
+      }
       recognitionRef.current = null
     }
     recognitionRef.current = recognition

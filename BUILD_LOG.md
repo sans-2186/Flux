@@ -26,7 +26,10 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - Flux AI mic **records** with `MediaRecorder` (red overlay, timer, live input-level bar). Stop sends the clip to `POST /transcribe` (Gemini) or live captions, then `/chat`.
 - The clip is re-encoded to **mono 16 kHz WAV** in the browser before upload — Gemini rejects WebM/Opus, which is why earlier recordings transcribed to nothing. `voice._audio_mime` also strips codec parameters server-side.
 - When nothing is heard the overlay now reports the actual reason (permission, empty clip, or the backend's error) instead of a generic message.
-- Compare **all three paths** open a real Toyota model page (`toyota.com/corolla/`, `toyota.com/corollahatchback/`) and save `POST /companion-session`. The Chrome extension in `extension/` injects the companion popup there and reads the vehicle name and price **off that page**, running it through the path's loan terms.
+- Compare **all three paths** open a real Toyota model page (`/camry`, `/corolla`, `/corollahatchback`) and save `POST /companion-session`. The Chrome extension in `extension/` injects the companion popup there and reads the vehicle name and price **off that page**, running it through the path's loan terms.
+- Toyota 301-redirects trailing slashes and query strings away, so the compare path travels in the URL **hash** (`#flux_option=...`); each path opens its own tab.
+- Extension hardening: CSS inlined (strict page CSP blocked fetching extension files), logo drawn in CSS, `toyota.com` apex added to the match patterns, and the panel re-mounts every 2s so Toyota's late hydration cannot wipe it. The panel renders with example numbers when the backend is down.
+- `/transcribe` now walks `llm.MODEL_CHAIN` with one retry each and reports "Gemini is busy right now" on 429/503; browser speech recognition restarts across pauses so live captions stay the primary path.
 - Notification alerts carry a one-line `summary`; the long explanation sits behind a "Why Flux flagged it" toggle.
 
 ## Shopping companion (Explore cheaper options)

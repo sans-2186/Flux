@@ -117,31 +117,42 @@ def transcribe(audio_base64: str, mime_type: str = "audio/wav") -> dict:
     if len(raw) < 64:
         return {"transcript": None, "source": "none", "reason": "audio too short"}
     from google.genai import types
-    model = os.getenv("GEMINI_STT_MODEL") or llm.GEMINI_MODEL
+    preferred = os.getenv("GEMINI_STT_MODEL")
+    chain = list(dict.fromkeys(([preferred] if preferred else []) + llm.MODEL_CHAIN))
     prompt = (
         "Transcribe this spoken English exactly. Return only the words the person said, "
         "no quotes, labels, or extra commentary. If there is no speech, return EMPTY."
     )
-    try:
-        resp = client.models.generate_content(
-            model=model,
-            contents=[
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part.from_bytes(data=raw, mime_type=_audio_mime(mime_type)),
-                        types.Part.from_text(text=prompt),
-                    ],
-                )
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_bytes(data=raw, mime_type=_audio_mime(mime_type)),
+                types.Part.from_text(text=prompt),
             ],
         )
-        text = (resp.text or "").strip().strip('"')
-        if not text or text.upper() in {"EMPTY", "(EMPTY)", "N/A"}:
-            return {"transcript": None, "source": f"gemini:{model}", "reason": "no speech detected"}
-        return {"transcript": text, "source": f"gemini:{model}"}
-    except Exception as e:
-        log.warning("Gemini transcribe failed: %s", e)
-        return {"transcript": None, "source": "none", "reason": str(e)[:300]}
+    ]
+    last_error = "no model answered"
+    busy = False
+    for model in chain:
+        for attempt in range(2):
+            try:
+                resp = client.models.generate_content(model=model, contents=contents)
+                text = (resp.text or "").strip().strip('"')
+                if not text or text.upper() in {"EMPTY", "(EMPTY)", "N/A"}:
+                    return {"transcript": None, "source": f"gemini:{model}", "reason": "no speech detected"}
+                return {"transcript": text, "source": f"gemini:{model}"}
+            except Exception as e:
+                log.warning("Gemini transcribe %s attempt %d failed: %s", model, attempt + 1, e)
+                last_error = str(e)[:300]
+                if llm._retryable(e):
+                    busy = True
+                    if attempt < 1:
+                        time.sleep(0.25)
+                        continue
+                break
+    reason = "Gemini is busy right now" if busy else last_error
+    return {"transcript": None, "source": "none", "reason": reason}
 
 
 def speak(text: str, voice: str = None) -> dict:
