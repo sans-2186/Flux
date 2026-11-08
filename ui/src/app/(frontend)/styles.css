@@ -4357,3 +4357,1117 @@
     width: 100%;
   }
 }
+
+/* --- Financial companion (from Flux_UI) --- */
+.shopping-extension-host {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(330px, 25vw, 390px);
+  background: #f3f1ec;
+  color: #252925;
+  transition: grid-template-columns 0.22s ease;
+}
+.shopping-extension-host.companion-collapsed {
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+.toyota-shopping-page {
+  min-width: 0;
+  background: #f7f6f3;
+}
+.toyota-site-header {
+  height: 70px;
+  padding: 0 clamp(24px, 4vw, 64px);
+  border-bottom: 1px solid #deddd8;
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: clamp(22px, 4vw, 58px);
+}
+.toyota-wordmark {
+  border: 0;
+  background: transparent;
+  color: #d71920;
+  font-family: 'Manrope', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.toyota-site-header nav {
+  display: flex;
+  gap: clamp(17px, 2.5vw, 34px);
+  color: #4e534f;
+  font-size: 12px;
+  font-weight: 600;
+}
+.toyota-location {
+  margin-left: auto;
+  padding: 9px 12px;
+  border: 1px solid #d9d9d5;
+  border-radius: 999px;
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3f4540;
+  font-size: 11px;
+  font-weight: 600;
+}
+.toyota-search-strip {
+  min-height: 92px;
+  padding: 14px clamp(24px, 4vw, 64px);
+  border-bottom: 1px solid #deddd8;
+  background: white;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+}
+.toyota-search-strip > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+.toyota-search-label {
+  color: #757b76;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.toyota-search-strip > div:first-child strong {
+  font-size: 15px;
+}
+.toyota-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.toyota-filter-row span {
+  padding: 7px 10px;
+  border: 1px solid #deded9;
+  border-radius: 999px;
+  color: #555b56;
+  font-size: 10px;
+  font-weight: 600;
+}
+.toyota-filter-row span.active {
+  border-color: #d88b66;
+  background: #fbede5;
+  color: #8b4f34;
+}
+.toyota-search-strip > button {
+  padding: 9px 12px;
+  border: 1px solid #cfcfca;
+  border-radius: 10px;
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #383d39;
+  font-size: 11px;
+  font-weight: 700;
+}
+.toyota-search-strip > button b {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2f5d46;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+}
+.toyota-listing-shell {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 36px clamp(24px, 4vw, 60px) 70px;
+}
+.toyota-results-heading {
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+.toyota-results-heading > div {
+  display: grid;
+  gap: 4px;
+}
+.toyota-results-heading span {
+  color: #a36143;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.toyota-results-heading h1 {
+  color: #252925;
+  font-size: clamp(26px, 3vw, 40px);
+  line-height: 1.08;
+}
+.toyota-results-heading p {
+  color: #737974;
+  font-size: 12px;
+}
+.toyota-results-heading > button {
+  padding: 10px 15px;
+  border: 1px solid #d4d4cf;
+  border-radius: 999px;
+  background: white;
+  color: #414642;
+  font-size: 11px;
+  font-weight: 700;
+}
+.toyota-listing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.65fr);
+  gap: 18px;
+}
+.toyota-car-gallery {
+  min-height: 390px;
+  border-radius: 22px;
+  background: #e9e8e4;
+  overflow: hidden;
+  position: relative;
+}
+.toyota-car-gallery img {
+  width: 100%;
+  height: 100%;
+  min-height: 390px;
+  display: block;
+  object-fit: cover;
+  object-position: center 56%;
+}
+.toyota-car-gallery > span {
+  position: absolute;
+  right: 15px;
+  bottom: 15px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #3c413d;
+  font-size: 10px;
+  font-weight: 700;
+}
+.toyota-car-gallery > small {
+  position: absolute;
+  left: 13px;
+  bottom: 13px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(20, 25, 21, 0.55);
+  color: white;
+  font-size: 8px;
+}
+.toyota-purchase-card {
+  padding: 24px;
+  border: 1px solid #deddd8;
+  border-radius: 22px;
+  background: white;
+}
+.toyota-match-pill {
+  width: max-content;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #e7efe8;
+  color: #2f5d46;
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+}
+.toyota-purchase-card > p:first-of-type {
+  margin-top: 25px;
+  color: #757b76;
+  font-size: 10px;
+}
+.toyota-purchase-card > strong {
+  margin-top: 3px;
+  display: block;
+  font-family: 'Manrope', sans-serif;
+  font-size: 31px;
+}
+.toyota-vehicle-facts {
+  margin: 20px 0;
+  padding: 14px 0;
+  border-top: 1px solid #ecebe6;
+  border-bottom: 1px solid #ecebe6;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.toyota-vehicle-facts span {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.toyota-vehicle-facts small {
+  color: #7b817c;
+  font-size: 9px;
+  font-weight: 500;
+}
+.toyota-primary-action,
+.toyota-secondary-action {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.toyota-primary-action {
+  border: 1px solid #d71920;
+  background: #d71920;
+  color: white;
+}
+.toyota-secondary-action {
+  margin-top: 8px;
+  border: 1px solid #bbbcb7;
+  background: white;
+  color: #333834;
+}
+.toyota-fine-print {
+  margin-top: 13px;
+  color: #858a86;
+  font-size: 8px;
+  line-height: 1.45;
+}
+.toyota-details-section,
+.toyota-more-results {
+  margin-top: 22px;
+  padding: 25px;
+  border: 1px solid #deddd8;
+  border-radius: 20px;
+  background: white;
+}
+.toyota-details-section > div:first-child span {
+  color: #a36143;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.toyota-details-section h2,
+.toyota-more-results h2 {
+  margin-top: 5px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.toyota-feature-grid {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.toyota-feature-grid article {
+  min-height: 112px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #f4f3ef;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  color: #345b46;
+}
+.toyota-feature-grid strong {
+  color: #353a36;
+  font-size: 11px;
+}
+.toyota-feature-grid span {
+  color: #7b817c;
+  font-size: 9px;
+}
+.toyota-more-results > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.toyota-more-results > div:first-child span {
+  color: #8a5a43;
+  font-size: 10px;
+  font-weight: 700;
+}
+.toyota-more-results > div:last-child {
+  margin-top: 17px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.toyota-more-results button {
+  padding: 10px;
+  border: 1px solid #e1e0dc;
+  border-radius: 14px;
+  background: white;
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  color: #333834;
+  text-align: left;
+}
+.toyota-more-results img {
+  width: 60px;
+  height: 48px;
+  border-radius: 9px;
+  object-fit: cover;
+}
+.toyota-more-results button > span {
+  display: grid;
+  gap: 3px;
+}
+.toyota-more-results strong {
+  font-size: 10px;
+}
+.toyota-more-results small {
+  color: #7b817c;
+  font-size: 9px;
+}
+.toyota-more-results b {
+  color: #2f5d46;
+  font-size: 11px;
+}
+.financial-companion-panel {
+  height: 100vh;
+  border-left: 1px solid #d9d8d2;
+  background: #f8f6f1;
+  overflow: hidden;
+  position: sticky;
+  top: 0;
+  box-shadow: -8px 0 28px rgba(42, 48, 43, 0.08);
+}
+.companion-drag-handle,
+.mobile-companion-summary {
+  display: none;
+}
+.companion-panel-header {
+  min-height: 68px;
+  padding: 11px 12px;
+  border-bottom: 1px solid #dddcd6;
+  background: rgba(255, 255, 255, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  position: relative;
+  z-index: 5;
+}
+.companion-panel-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.companion-panel-brand > span {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #edf2ed;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.companion-panel-brand img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.companion-panel-brand > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.companion-panel-brand strong {
+  overflow: hidden;
+  color: #2d4738;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.companion-panel-brand small {
+  color: #777d78;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+}
+.companion-panel-brand small i,
+.companion-vehicle-card small i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d17d55;
+  display: block;
+  flex: none;
+  box-shadow: 0 0 0 3px rgba(209, 125, 85, 0.12);
+}
+.companion-panel-controls {
+  display: flex;
+  gap: 4px;
+}
+.companion-panel-controls button {
+  width: 31px;
+  height: 31px;
+  border: 1px solid #dfded8;
+  border-radius: 9px;
+  background: white;
+  color: #47604f;
+  display: grid;
+  place-items: center;
+}
+.companion-panel-controls button:first-child svg {
+  transform: rotate(180deg);
+}
+.companion-collapsed .companion-panel-controls button:first-child svg {
+  transform: none;
+}
+.companion-more {
+  margin-top: -6px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.companion-menu {
+  width: 170px;
+  padding: 6px;
+  border: 1px solid #dddcd6;
+  border-radius: 12px;
+  background: white;
+  display: grid;
+  position: absolute;
+  top: 56px;
+  right: 11px;
+  box-shadow: 0 12px 30px rgba(42, 48, 43, 0.14);
+}
+.companion-menu button {
+  padding: 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #414742;
+  text-align: left;
+  font-size: 10px;
+}
+.companion-menu button:hover {
+  background: #f2f1ec;
+}
+.companion-scroll {
+  height: calc(100vh - 68px);
+  padding: 12px 12px 30px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.companion-vehicle-card {
+  padding: 10px;
+  border: 1px solid #deddd7;
+  border-radius: 14px;
+  background: white;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+}
+.companion-vehicle-card > img {
+  width: 78px;
+  height: 76px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.companion-vehicle-card > div {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}
+.companion-vehicle-card span {
+  color: #a05d3f;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.companion-vehicle-card strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.companion-vehicle-card b {
+  color: #2f5d46;
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+}
+.companion-vehicle-card small {
+  margin-top: 2px;
+  color: #7c827d;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  line-height: 1.25;
+}
+.companion-section {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #dfded8;
+  border-radius: 15px;
+  background: white;
+}
+.companion-section-heading {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #384039;
+  text-align: left;
+}
+.companion-section-heading > span {
+  display: grid;
+  gap: 3px;
+}
+.companion-section-heading small {
+  color: #9b6045;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.companion-section-heading strong {
+  font-size: 11px;
+}
+.companion-section-heading[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
+}
+.companion-primary-metric {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 13px;
+  background: #2f5d46;
+  color: white;
+  display: grid;
+  gap: 3px;
+}
+.companion-primary-metric span {
+  font-size: 9px;
+  opacity: 0.74;
+}
+.companion-primary-metric strong {
+  font-family: 'Manrope', sans-serif;
+  font-size: 25px;
+  letter-spacing: -0.04em;
+}
+.companion-primary-metric small {
+  font-size: 8px;
+  opacity: 0.65;
+}
+.companion-metric-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.companion-metric-grid > div {
+  min-height: 58px;
+  padding: 9px;
+  border-radius: 10px;
+  background: #f3f2ed;
+  display: grid;
+  align-content: space-between;
+  gap: 4px;
+}
+.companion-metric-grid > div.accent {
+  background: #f8e7dd;
+}
+.companion-metric-grid span {
+  color: #747a75;
+  font-size: 8px;
+  line-height: 1.25;
+}
+.companion-metric-grid strong {
+  color: #333a34;
+  font-size: 12px;
+}
+.companion-ai-insight {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 11px;
+  background: #f8e7dd;
+  color: #7a4d38;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.companion-ai-insight svg {
+  flex: none;
+}
+.companion-ai-insight p {
+  font-size: 9px;
+  line-height: 1.45;
+}
+.companion-estimate-note {
+  margin-top: 7px;
+  color: #8a8f8b;
+  font-size: 7px;
+  line-height: 1.4;
+}
+.companion-copy-heading {
+  display: grid;
+  gap: 3px;
+}
+.companion-copy-heading span {
+  color: #343b35;
+  font-size: 11px;
+  font-weight: 700;
+}
+.companion-copy-heading small {
+  color: #858a86;
+  font-size: 8px;
+}
+.companion-options > button {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px;
+  border: 1px solid #e0dfda;
+  border-radius: 11px;
+  background: #fbfaf7;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: #343a35;
+  text-align: left;
+}
+.companion-options > button.selected {
+  border-color: #6e947b;
+  background: #edf3ed;
+  box-shadow: 0 0 0 1px rgba(75, 113, 88, 0.08);
+}
+.companion-option-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+}
+.companion-option-icon.cheaper {
+  background: #e3eee5;
+  color: #2f5d46;
+}
+.companion-option-icon.higher {
+  background: #f8e6dc;
+  color: #965c40;
+}
+.companion-options > button > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.companion-options strong {
+  font-size: 9px;
+}
+.companion-options small {
+  color: #7c827d;
+  font-size: 8px;
+}
+.companion-options b {
+  color: #2f5d46;
+  font-size: 8px;
+}
+.companion-breakdown-content {
+  margin-top: 12px;
+}
+.companion-breakdown-content dl {
+  margin: 0;
+  display: grid;
+}
+.companion-breakdown-content dl > div {
+  padding: 7px 0;
+  border-bottom: 1px solid #eeede8;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.companion-breakdown-content dt {
+  color: #777d78;
+  font-size: 8px;
+}
+.companion-breakdown-content dd {
+  margin: 0;
+  color: #343a35;
+  font-size: 9px;
+  font-weight: 700;
+}
+.companion-assumption-fields {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.companion-assumption-fields label {
+  color: #727873;
+  display: grid;
+  gap: 4px;
+  font-size: 8px;
+}
+.companion-assumption-fields input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #dad9d3;
+  border-radius: 8px;
+  background: #fbfaf7;
+  color: #343a35;
+  font-size: 9px;
+  font-weight: 600;
+}
+.companion-breakdown-content > p {
+  margin-top: 9px;
+  color: #858a86;
+  font-size: 7px;
+  line-height: 1.45;
+}
+.companion-chat {
+  margin-bottom: 4px;
+}
+.companion-chat-heading {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.companion-chat-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #2f5d46;
+  color: white;
+  display: grid;
+  place-items: center;
+}
+.companion-chat-heading p {
+  color: #3b433c;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.companion-chat-heading button {
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #f7e4d9;
+  color: #8c5439;
+  font-size: 8px;
+  font-weight: 700;
+}
+.companion-chat-thread {
+  max-height: 190px;
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #f4f3ee;
+  display: grid;
+  gap: 6px;
+  overflow-y: auto;
+}
+.companion-chat-thread p {
+  width: fit-content;
+  max-width: 88%;
+  padding: 7px 8px;
+  border-radius: 9px 9px 9px 3px;
+  background: white;
+  color: #515852;
+  font-size: 8px;
+  line-height: 1.4;
+}
+.companion-chat-thread p.user {
+  margin-left: auto;
+  border-radius: 9px 9px 3px 9px;
+  background: #2f5d46;
+  color: white;
+}
+.companion-question-chips {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.companion-question-chips button {
+  padding: 6px 7px;
+  border: 1px solid #d9d9d3;
+  border-radius: 999px;
+  background: white;
+  color: #4e564f;
+  font-size: 7px;
+}
+.companion-chat form {
+  min-height: 39px;
+  margin-top: 8px;
+  padding: 4px 4px 4px 10px;
+  border: 1px solid #d9d9d3;
+  border-radius: 12px;
+  background: #fbfaf7;
+  display: flex;
+  align-items: center;
+}
+.companion-chat input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #343a35;
+  font-size: 8px;
+}
+.companion-chat form button {
+  width: 31px;
+  height: 31px;
+  border: 0;
+  border-radius: 9px;
+  background: #2f5d46;
+  color: white;
+  display: grid;
+  place-items: center;
+}
+.companion-collapsed .companion-panel-header {
+  padding: 11px 8px;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.companion-collapsed .companion-panel-brand > div,
+.companion-collapsed .companion-panel-controls button:last-child {
+  display: none;
+}
+.companion-collapsed .companion-panel-controls {
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .toyota-site-header nav {
+    display: none;
+  }
+  .toyota-search-strip {
+    grid-template-columns: 1fr auto;
+  }
+  .toyota-filter-row {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .toyota-listing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 900px) {
+  .shopping-extension-host,
+  .shopping-extension-host.companion-collapsed {
+    display: block;
+  }
+  .toyota-shopping-page {
+    min-height: 100vh;
+    padding-bottom: 20dvh;
+  }
+  .financial-companion-panel {
+    width: 100%;
+    min-height: 0;
+    height: 20dvh;
+    margin: 0;
+    border-left: 0;
+    border-top: 1px solid #d7d5ce;
+    border-radius: 20px 20px 0 0;
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 100;
+    transition: height 0.24s ease;
+    box-shadow: 0 -12px 34px rgba(42, 48, 43, 0.16);
+  }
+  .financial-companion-panel.dragging {
+    transition: none;
+  }
+  .mobile-sheet-expanded .financial-companion-panel {
+    height: 92dvh;
+  }
+  .companion-drag-handle {
+    width: 100%;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    background: white;
+    display: grid;
+    place-items: center;
+    cursor: ns-resize;
+    touch-action: none;
+  }
+  .companion-drag-handle span {
+    width: 44px;
+    height: 4px;
+    border-radius: 999px;
+    background: #c5c6c0;
+    display: block;
+  }
+  .companion-panel-header {
+    min-height: 52px;
+    height: 52px;
+    padding: 7px 12px;
+  }
+  .companion-panel-brand > span {
+    width: 31px;
+    height: 31px;
+  }
+  .companion-menu {
+    top: 48px;
+  }
+  .mobile-companion-summary {
+    height: calc(20dvh - 74px);
+    padding: 9px 12px max(9px, env(safe-area-inset-bottom));
+    background: #f8f6f1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 5px 14px;
+  }
+  .mobile-companion-summary > div:first-child {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  .mobile-companion-summary span {
+    overflow: hidden;
+    color: #737a74;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-companion-summary strong {
+    color: #2f5d46;
+    font-family: 'Manrope', sans-serif;
+    font-size: 18px;
+  }
+  .mobile-companion-summary strong small {
+    margin-left: 4px;
+    color: #7e847f;
+    font-family: 'Inter', sans-serif;
+    font-size: 8px;
+    font-weight: 500;
+  }
+  .mobile-companion-summary > div:nth-child(2) {
+    display: grid;
+    gap: 3px;
+    text-align: right;
+  }
+  .mobile-companion-summary > div:nth-child(2) strong {
+    font-size: 12px;
+  }
+  .companion-scroll {
+    min-height: 0;
+    height: calc(92dvh - 74px);
+    padding-bottom: max(30px, env(safe-area-inset-bottom));
+    display: none;
+    overflow-y: auto;
+  }
+  .mobile-sheet-expanded .mobile-companion-summary {
+    display: none;
+  }
+  .mobile-sheet-expanded .companion-scroll {
+    display: block;
+  }
+  .companion-collapsed .companion-panel-header {
+    padding: 7px 12px;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .companion-collapsed .companion-panel-controls {
+    margin-top: 0;
+  }
+  .companion-collapsed .companion-panel-brand > div,
+  .companion-collapsed .companion-panel-controls button:last-child {
+    display: grid;
+  }
+}
+
+@media (min-width: 700px) {
+  body {
+    padding: 22px 0;
+  }
+  .shopping-extension-host {
+    min-height: 100vh;
+    margin: -22px 0;
+  }
+  .page {
+    min-height: calc(100vh - 44px);
+    border-radius: 28px;
+    overflow: hidden;
+  }
+  .sticky-actions,
+  .bottom-nav {
+    bottom: 22px;
+    border-radius: 0 0 28px 28px;
+  }
+  .extension-host {
+    padding: 18px;
+  }
+  .extension-panel {
+    min-height: calc(100vh - 36px);
+    border: 1px solid #d7dbd5;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+}
+
+
+/* Companion-only mode (no mock Toyota shopping page) */
+.shopping-extension-host.companion-only {
+  display: block;
+  grid-template-columns: none;
+  min-height: 100vh;
+  padding: 18px 16px 28px;
+  background: linear-gradient(160deg, #eef3ee 0%, #f7f5f0 45%, #e8eee9 100%);
+}
+.shopping-extension-host.companion-only .toyota-shopping-page {
+  display: none !important;
+}
+.shopping-extension-host.companion-only .financial-companion-panel {
+  position: relative;
+  width: min(480px, 100%);
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: calc(100vh - 72px);
+  border-radius: 24px;
+  box-shadow: 0 18px 50px rgba(28, 45, 38, 0.12);
+}
+.shopping-extension-host.companion-only .companion-page-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(480px, 100%);
+  margin: 0 auto 14px;
+  padding: 4px 4px 0;
+}
+.shopping-extension-host.companion-only .companion-page-bar strong {
+  font-size: 15px;
+  color: #1c2d26;
+}
+.shopping-extension-host.companion-only .companion-page-bar button {
+  border: 0;
+  background: transparent;
+  color: #3d5a4c;
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .shopping-extension-host.companion-only {
+    padding: 0;
+  }
+  .shopping-extension-host.companion-only .companion-page-bar {
+    width: 100%;
+    padding: 14px 16px 0;
+  }
+  .shopping-extension-host.companion-only .financial-companion-panel {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    min-height: calc(100vh - 52px);
+  }
+}
