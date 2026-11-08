@@ -3,6 +3,25 @@
 For the teammate's UI repo: https://github.com/Cindiya/Flux_UI (Next.js, exported from Figma Make).
 The patch was made against `Flux_UI@32f2cec` and applies cleanly to it.
 
+## Windows (PowerShell)
+
+Backend (Flux repo), once: `python -m venv .venv`, `.\.venv\Scripts\Activate.ps1`, `pip install -r requirements.txt`, then `uvicorn app.main:app --port 8000`.
+
+UI (Flux_UI repo):
+
+```powershell
+git clone https://github.com/Cindiya/Flux_UI.git
+cd Flux_UI
+git apply --ignore-whitespace "$HOME\Flux\frontend-integration\flux-ui.patch"   # --ignore-whitespace is needed: Windows Git converts line endings
+npm install -g pnpm
+pnpm install
+$env:NODE_OPTIONS="--no-deprecation"; pnpm exec next dev --port 3000
+```
+
+Use `pnpm exec next dev` instead of `pnpm dev`: the `dev` script uses Mac/Linux syntax (`NODE_OPTIONS=... next dev`) and fails on Windows. Install Node 24.22.1 or newer first (https://nodejs.org); older Node usually still runs the dev server, with a warning.
+
+**Limit of the UI repo, not of this integration:** the UI's login, onboarding and profile data live in a Payload backend that Figma Make provisions (`FIGMA_EID`). Run locally it prints "Environment ID could not be resolved", "Explore with demo data" gets stuck on the last onboarding step, and the chat screen cannot be reached through the normal flow. Run the UI inside the teammate's Figma Make project to use it end to end. The browser then calls the backend on your own machine (`http://localhost:8000`); Chrome allows that, and may ask for permission to access the local network.
+
 ## What it changes in the UI
 
 The UI's chat used hard-coded replies. After the patch:
@@ -23,7 +42,7 @@ cd Flux_UI
 git apply /path/to/Flux/frontend-integration/flux-ui.patch
 ```
 
-(or copy `flux-backend.ts` to `src/app/(frontend)/` and make the small edits shown in the patch to `FluxApp.tsx` and `styles.css`).
+(on Windows add `--ignore-whitespace`; or copy `flux-backend.ts` to `src/app/(frontend)/` and make the small edits shown in the patch to `FluxApp.tsx` and `styles.css`).
 
 Optional `.env.local` in the UI repo (defaults shown):
 
