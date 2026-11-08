@@ -23,8 +23,11 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 
 ## Voice mic + Toyota companion popup
 
-- Flux AI mic **records** with `MediaRecorder` (red overlay + timer). Stop sends the clip to `POST /transcribe` (Gemini) or live captions, then `/chat`.
-- Compare **all three paths** open Toyota of Plano and save `POST /companion-session`. Chrome extension in `extension/` injects the companion popup on that HTTPS dealer page.
+- Flux AI mic **records** with `MediaRecorder` (red overlay, timer, live input-level bar). Stop sends the clip to `POST /transcribe` (Gemini) or live captions, then `/chat`.
+- The clip is re-encoded to **mono 16 kHz WAV** in the browser before upload — Gemini rejects WebM/Opus, which is why earlier recordings transcribed to nothing. `voice._audio_mime` also strips codec parameters server-side.
+- When nothing is heard the overlay now reports the actual reason (permission, empty clip, or the backend's error) instead of a generic message.
+- Compare **all three paths** open a real Toyota model page (`toyota.com/corolla/`, `toyota.com/corollahatchback/`) and save `POST /companion-session`. The Chrome extension in `extension/` injects the companion popup there and reads the vehicle name and price **off that page**, running it through the path's loan terms.
+- Notification alerts carry a one-line `summary`; the long explanation sits behind a "Why Flux flagged it" toggle.
 
 ## Shopping companion (Explore cheaper options)
 

@@ -20,6 +20,7 @@ import {
 } from './flux-api-client'
 import {
   askCoach,
+  blobToWav,
   clearDemoPackCache,
   getBackendUserId,
   loadDemoPack,
@@ -30,8 +31,12 @@ import {
   type DemoAlert,
 } from './flux-backend'
 
-const TOYOTA_LISTING_URL =
-  'https://www.toyotaofplano.com/?utm_source=flux&utm_medium=companion'
+// Real Toyota vehicle pages the companion analyses in context (one per compare path).
+const TOYOTA_VEHICLE_URLS: Record<'buy-now' | 'wait' | 'cheaper', string> = {
+  'buy-now': 'https://www.toyota.com/corolla/',
+  wait: 'https://www.toyota.com/corolla/',
+  cheaper: 'https://www.toyota.com/corollahatchback/',
+}
 import { FinancialCompanion } from './FinancialCompanion'
 
 const fluxLogo = '/flux-logo.png'
@@ -529,6 +534,7 @@ function App() {
   const [isListening, setIsListening] = useState(false)
   const [voicePhase, setVoicePhase] = useState<'idle' | 'recording' | 'transcribing'>('idle')
   const [voiceSeconds, setVoiceSeconds] = useState(0)
+  const [voiceLevel, setVoiceLevel] = useState(0)
   const [voiceMessage, setVoiceMessage] = useState('')
   const [completed, setCompleted] = useState<boolean[]>([false, false, false])
   const [toast, setToast] = useState('')
@@ -548,6 +554,7 @@ function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaChunksRef = useRef<Blob[]>([])
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const meterRef = useRef<{ context: AudioContext; frame: number } | null>(null)
   const recognitionRef = useRef<{
     start: () => void
     stop: () => void
@@ -1037,13 +1044,14 @@ function App() {
     } catch {
       // Toyota tab still opens; the extension uses defaults if the session is missing.
     }
-    const opened = window.open(`${TOYOTA_LISTING_URL}&flux_option=${option}`, 'flux-toyota')
+    const target = `${TOYOTA_VEHICLE_URLS[option]}?flux_option=${option}`
+    const opened = window.open(target, 'flux-toyota')
     if (!opened) {
       go('extension')
       showToast('Popup blocked — showing the companion in Flux.')
       return
     }
-    showToast('Toyota listing opened. The Flux companion pops up if the Chrome extension is loaded.')
+    showToast('Toyota page opened. The Flux companion pops up there with this path’s numbers.')
   }
 
   const handleSignup = async (event: FormEvent) => {
@@ -1189,6 +1197,33 @@ function App() {
   const stopMicTracks = () => {
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
     mediaStreamRef.current = null
+    if (meterRef.current) {
+      cancelAnimationFrame(meterRef.current.frame)
+      void meterRef.current.context.close()
+      meterRef.current = null
+    }
+    setVoiceLevel(0)
+  }
+
+  /** Live input level so the user can see the mic is picking up sound. */
+  const startLevelMeter = (stream: MediaStream) => {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+    const context = new AudioCtx()
+    const analyser = context.createAnalyser()
+    analyser.fftSize = 512
+    context.createMediaStreamSource(stream).connect(analyser)
+    const data = new Uint8Array(analyser.frequencyBinCount)
+    const tick = () => {
+      analyser.getByteTimeDomainData(data)
+      let peak = 0
+      for (let i = 0; i < data.length; i += 1) peak = Math.max(peak, Math.abs(data[i] - 128))
+      setVoiceLevel(Math.min(1, peak / 60))
+      if (meterRef.current) meterRef.current.frame = requestAnimationFrame(tick)
+    }
+    meterRef.current = { context, frame: requestAnimationFrame(tick) }
   }
 
   const finishVoicePrompt = async (typedFallback: string) => {
@@ -1197,24 +1232,35 @@ function App() {
     const chunks = mediaChunksRef.current
     mediaChunksRef.current = []
     let spoken = voiceTranscriptRef.current.trim()
-    if (!spoken && chunks.length && typeof MediaRecorder !== 'undefined') {
+    let failureReason = ''
+    if (!spoken && chunks.length) {
       try {
-        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' })
-        if (blob.size > 256) {
+        const raw = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' })
+        if (raw.size <= 1024) {
+          failureReason = 'The recording came through empty. Pick the right mic in Chrome and speak closer to it.'
+        } else {
+          // Gemini does not accept WebM/Opus; send WAV instead.
+          const wav = await blobToWav(raw)
           const audioBase64 = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
-            reader.onloadend = () => {
-              const dataUrl = String(reader.result || '')
-              resolve(dataUrl.split(',')[1] || '')
-            }
+            reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '')
             reader.onerror = reject
-            reader.readAsDataURL(blob)
+            reader.readAsDataURL(wav)
           })
-          spoken = (await transcribeAudio(audioBase64, blob.type || 'audio/webm')) || ''
+          const result = await transcribeAudio(audioBase64, wav.type || 'audio/wav')
+          spoken = result.transcript || ''
+          if (!spoken) {
+            failureReason = result.reason
+              ? `Could not transcribe: ${result.reason}`
+              : 'No speech was detected in the recording.'
+          }
         }
-      } catch {
-        spoken = ''
+      } catch (error) {
+        failureReason =
+          error instanceof Error ? `Transcription failed: ${error.message}` : 'Transcription failed.'
       }
+    } else if (!spoken) {
+      failureReason = 'No audio was captured. Check the microphone Chrome is using.'
     }
     setVoicePhase('idle')
     setIsListening(false)
@@ -1231,7 +1277,7 @@ function App() {
       void sendPrompt(typedFallback)
       return
     }
-    setVoiceMessage('Mic was on, but nothing was heard. Check Chrome microphone permission and try again.')
+    setVoiceMessage(failureReason || 'Mic was on, but nothing was heard. Try again.')
   }
 
   const toggleVoiceInput = async () => {
@@ -1293,6 +1339,7 @@ function App() {
         void finishVoicePrompt(startingText)
       }
       recorder.start(250)
+      startLevelMeter(stream)
       setIsListening(true)
       setVoicePhase('recording')
       setVoiceMessage('Mic is on — speak, then tap the red button to send.')
@@ -2249,7 +2296,14 @@ function App() {
         {(isListening || voicePhase !== 'idle') && (
           <div className="voice-capture-overlay" role="status" aria-live="polite">
             <div className="voice-capture-card">
-              <div className={`voice-orb ${voicePhase === 'transcribing' ? 'busy' : 'live'}`} />
+              <div
+                className={`voice-orb ${voicePhase === 'transcribing' ? 'busy' : 'live'}`}
+                style={
+                  voicePhase === 'recording'
+                    ? { transform: `scale(${1 + voiceLevel * 0.5})` }
+                    : undefined
+                }
+              />
               <strong>
                 {voicePhase === 'transcribing' ? 'Turning that into text…' : 'Mic is on'}
               </strong>
@@ -2258,6 +2312,11 @@ function App() {
                   ? 'Sending your recording to Flux.'
                   : `Recording ${voiceSeconds}s — speak, then tap Stop to send.`}
               </p>
+              {voicePhase === 'recording' && (
+                <div className="voice-level" aria-hidden>
+                  <i style={{ width: `${Math.round(voiceLevel * 100)}%` }} />
+                </div>
+              )}
               {chatInput ? <em>{chatInput}</em> : <em>Waiting for speech…</em>}
               {voicePhase === 'recording' && (
                 <button type="button" onClick={() => void toggleVoiceInput()}>
@@ -2772,11 +2831,15 @@ function App() {
                     {alert.severity === 'high' ? 'High' : alert.severity === 'medium' ? 'Medium' : 'Low'}{' '}
                     severity · {money(alert.transaction.amount)} at {alert.transaction.merchant}
                   </strong>
-                  <p>{alert.explanation}</p>
-                  <p className="weekly-disclaimer" style={{ marginTop: 6 }}>
-                    {alert.flags.map((f) => f.id.replace(/_/g, ' ')).join(' · ')}
-                    {demoMatchLabel ? ` · ledger ${demoMatchLabel}` : ''}
-                  </p>
+                  <p>{alert.summary || alert.explanation}</p>
+                  <details className="alert-details">
+                    <summary>Why Flux flagged it</summary>
+                    <p>{alert.explanation}</p>
+                    <p className="weekly-disclaimer">
+                      {alert.flags.map((f) => f.id.replace(/_/g, ' ')).join(' · ')}
+                      {demoMatchLabel ? ` · ledger ${demoMatchLabel}` : ''}
+                    </p>
+                  </details>
                 </div>
               </article>
             ))}

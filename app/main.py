@@ -64,7 +64,7 @@ class SpeakRequest(BaseModel):
 
 class TranscribeRequest(BaseModel):
     audio_base64: str = Field(min_length=8)
-    mime_type: str = Field(default="audio/webm", max_length=80)
+    mime_type: str = Field(default="audio/wav", max_length=80)
 
 
 class TransactionRequest(BaseModel):

@@ -1784,6 +1784,29 @@
   color: #fff;
   font-style: normal;
 }
+.alert-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #4f7a63;
+  margin-top: 6px;
+}
+.alert-details p {
+  margin-top: 6px;
+}
+.voice-level {
+  height: 8px;
+  margin: 14px auto 0;
+  width: 80%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+.voice-level i {
+  display: block;
+  height: 100%;
+  background: #f6d0c4;
+  transition: width 90ms linear;
+}
 .voice-capture-card button {
   margin-top: 16px;
   border: 0;

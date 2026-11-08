@@ -94,7 +94,18 @@ def _discover_tts_models(client, tried: list) -> list:
     return [n for n in names if n not in tried][:3]
 
 
-def transcribe(audio_base64: str, mime_type: str = "audio/webm") -> dict:
+SUPPORTED_AUDIO = {"audio/wav", "audio/mp3", "audio/mpeg", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"}
+
+
+def _audio_mime(mime_type: str) -> str:
+    """Gemini only accepts a short list of audio types and rejects codec parameters."""
+    base = (mime_type or "").split(";")[0].strip().lower()
+    if base == "audio/x-wav":
+        base = "audio/wav"
+    return base if base in SUPPORTED_AUDIO else "audio/wav"
+
+
+def transcribe(audio_base64: str, mime_type: str = "audio/wav") -> dict:
     """Speech-to-text via Gemini. Never raises. `transcript` is None when nothing could be heard."""
     client = llm.get_client()
     if client is None:
@@ -118,7 +129,7 @@ def transcribe(audio_base64: str, mime_type: str = "audio/webm") -> dict:
                 types.Content(
                     role="user",
                     parts=[
-                        types.Part.from_bytes(data=raw, mime_type=mime_type or "audio/webm"),
+                        types.Part.from_bytes(data=raw, mime_type=_audio_mime(mime_type)),
                         types.Part.from_text(text=prompt),
                     ],
                 )

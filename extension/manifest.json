@@ -7,8 +7,8 @@
   "host_permissions": [
     "http://127.0.0.1:8000/*",
     "http://localhost:8000/*",
-    "https://www.toyotaofplano.com/*",
-    "https://*.toyota.com/*"
+    "https://*.toyota.com/*",
+    "https://www.toyotaofplano.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -16,8 +16,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.toyotaofplano.com/*",
-        "https://*.toyota.com/*"
+        "https://*.toyota.com/*",
+        "https://www.toyotaofplano.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -27,8 +27,8 @@
     {
       "resources": ["flux-logo.png", "content.css"],
       "matches": [
-        "https://www.toyotaofplano.com/*",
-        "https://*.toyota.com/*"
+        "https://*.toyota.com/*",
+        "https://www.toyotaofplano.com/*"
       ]
     }
   ]

@@ -289,6 +289,14 @@ def test_alerts_list_newest_first_with_fallback_text_and_disclaimer():
         assert a["flags"][0]["detail"] in a["explanation"]
 
 
+def test_alert_summary_is_short_and_names_the_charge():
+    post_tx(amount=40, merchant="Crypto Exchange Ltd", country="RO", timestamp="2026-11-07T03:12:00")
+    alert = client.get("/alerts/C002?explain=false").json()["alerts"][0]
+    summary = alert["summary"]
+    assert "Crypto Exchange Ltd" in summary and "$40" in summary
+    assert len(summary) < 110 and len(summary) < len(alert["explanation"])
+
+
 def test_alerts_are_per_user_and_unknown_user_404():
     post_tx(amount=1300)
     assert client.get("/alerts/C003").json()["count"] == 0
@@ -308,7 +316,7 @@ def test_alert_explanation_comes_from_gemini_and_is_cached(monkeypatch):
     assert first["explanation"].endswith(llm.DISCLAIMER) and second["explanation"] == first["explanation"]
     assert len(fake.requests) == 1
     assert "$1,300.00 at Chipotle" in sent["contents"][0]["parts"][0]["text"]
-    assert "Do not do any math" in sent["systemInstruction"]["parts"][0]["text"]
+    assert "No math, no numbers" in sent["systemInstruction"]["parts"][0]["text"]
 
 
 def test_alert_explanation_falls_back_when_gemini_is_down(monkeypatch):

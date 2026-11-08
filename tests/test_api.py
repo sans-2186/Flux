@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 from fastapi.testclient import TestClient
 
-from app import companion, llm, store
+from app import companion, llm, store, voice
 from app.main import app
 
 client = TestClient(app)
@@ -219,6 +219,12 @@ def test_transcribe_without_key_does_not_500(monkeypatch):
     assert r.status_code == 200
     body = r.json()
     assert body["transcript"] is None and body["source"] == "none"
+
+
+def test_audio_mime_is_normalised_to_something_gemini_accepts():
+    assert voice._audio_mime("audio/webm;codecs=opus") == "audio/wav"
+    assert voice._audio_mime("audio/wav") == "audio/wav"
+    assert voice._audio_mime("audio/ogg; codecs=opus") == "audio/ogg"
 
 
 def test_companion_session_roundtrip():

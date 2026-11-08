@@ -31,6 +31,35 @@
     }
   }
 
+  /** Read the vehicle and price off the Toyota page the user is actually on. */
+  const readPageListing = () => {
+    const titleSource =
+      document.querySelector('h1')?.textContent ||
+      document.querySelector('meta[property="og:title"]')?.getAttribute('content') ||
+      document.title ||
+      ''
+    const name = titleSource.replace(/\s+/g, ' ').trim().slice(0, 70)
+
+    let price = 0
+    const priceAttr =
+      document.querySelector('[itemprop="price"]')?.getAttribute('content') ||
+      document.querySelector('meta[property="product:price:amount"]')?.getAttribute('content')
+    if (priceAttr) price = Number(String(priceAttr).replace(/[^0-9.]/g, '')) || 0
+    if (!price) {
+      const text = (document.body?.innerText || '').slice(0, 20000)
+      const candidates = [...text.matchAll(/\$\s?([0-9]{2,3},[0-9]{3})/g)]
+        .map((match) => Number(match[1].replace(/,/g, '')))
+        .filter((value) => value >= 12000 && value <= 120000)
+      if (candidates.length) price = candidates.sort((a, b) => a - b)[0]
+    }
+    const slug = location.pathname.split('/').filter(Boolean)[0] || ''
+    return {
+      name: name || (slug ? `Toyota ${slug}` : ''),
+      price,
+      url: location.href,
+    }
+  }
+
   const defaults = {
     option: optionFromUrl() || 'buy-now',
     option_label: 'Current listing',
@@ -48,8 +77,12 @@
   const mount = async () => {
     const sessionRes = await askBackground({ type: 'flux-get-session' })
     const session = sessionRes?.ok && sessionRes.data ? sessionRes.data : defaults
+    const listing = readPageListing()
     const scenario = { ...defaults.scenario, ...(session.scenario || {}) }
     const profile = { ...defaults.profile, ...(session.profile || {}) }
+    // The page the user is on wins: analyse this vehicle with the Flux path's loan terms.
+    if (listing.price) scenario.price = listing.price
+    const vehicleName = listing.name || session.vehicle_name || defaults.vehicle_name
     const estimate = loan(scenario)
     const remaining = profile.income - profile.housing - profile.expenses - profile.debt - estimate.totalMonthly
     const savingsAfter = Math.max((profile.savings || 0) - estimate.upfront, 0)
@@ -78,11 +111,14 @@
           <button type="button" class="flux-close" aria-label="Close">×</button>
         </header>
         <div class="flux-body">
-          <div class="flux-kicker">${session.vehicle_name || defaults.vehicle_name}</div>
+          <div class="flux-kicker">${vehicleName}</div>
           <div class="flux-metric">
             <span>Estimated monthly car cost</span>
             <b>${money(estimate.totalMonthly)}</b>
-            <small>Payment ${money(estimate.payment)} · using your Flux profile</small>
+            <small>
+              ${listing.price ? `From this page: ${money(listing.price)}` : `Price ${money(scenario.price)}`}
+              · payment ${money(estimate.payment)}
+            </small>
           </div>
           <div class="flux-grid">
             <div><span>Monthly remaining</span><strong>${money(remaining)}</strong></div>
@@ -111,7 +147,7 @@
       thread.insertAdjacentHTML('beforeend', `<p class="user">You: ${text}</p><p class="ai">Flux is thinking…</p>`)
       thread.scrollTop = thread.scrollHeight
       const context =
-        `(Shopping companion on a Toyota listing: ${session.vehicle_name || 'vehicle'} priced ${money(scenario.price)}. ` +
+        `(Shopping companion on the Toyota page ${listing.url}: ${vehicleName} priced ${money(scenario.price)}. ` +
         `Path: ${session.option_label || session.option}. Loan ${scenario.term} mo at ${scenario.apr}% APR, down ${money(scenario.down)}. ` +
         `Estimated payment ${money(estimate.payment)}, total monthly ${money(estimate.totalMonthly)}, remaining ${money(remaining)}.)`
       const result = await askBackground({
