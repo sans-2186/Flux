@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from app import agent, finance, fraud, handoff, llm, mockdata, store, toyota, voice
+from app import agent, finance, fraud, handoff, llm, matchdemo, mockdata, store, toyota, voice
 
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -82,6 +82,18 @@ class HandoffRequest(BaseModel):
     user_id: str
     reason: Optional[str] = Field(default=None, max_length=500)
     conversation: List[str] = []
+
+
+class DemoPackRequest(BaseModel):
+    """Match onboarding choices to a PNC demo customer and seed suspicious-transaction alerts.
+
+    Does not change the form / coach user — only picks a ledger identity for notifications.
+    """
+    goals: List[str] = []
+    monthly_income: float = Field(default=0, ge=0)
+    monthly_debt_payments: float = Field(default=0, ge=0)
+    understanding_focus: Optional[str] = None
+    explain: bool = Field(default=False, description="Ask Gemini to rewrite alert copy (slower).")
 
 
 USER_ID_EXAMPLES = {
@@ -214,6 +226,40 @@ def alerts(user_id: str = PATH_USER, explain: bool = True):
     _user_or_404(user_id)
     found = fraud.alerts_for(user_id, explain=explain)
     return {"user_id": user_id, "count": len(found), "alerts": found}
+
+
+@app.post("/demo-pack")
+def demo_pack(req: DemoPackRequest = Body(openapi_examples={
+    "car_saver": {"summary": "Car / purchase goal", "value": {
+        "goals": ["Save for a purchase", "Buy my first car"], "monthly_income": 3200,
+        "monthly_debt_payments": 250, "understanding_focus": "affordability"}},
+    "debt_focus": {"summary": "Debt focus", "value": {
+        "goals": ["Pay down debt"], "monthly_income": 4200,
+        "monthly_debt_payments": 500, "understanding_focus": "debt"}},
+})):
+    """Pick the closest C001–C030 customer to the UI onboarding choices, seed 2 suspicious
+    transactions against their spending history, and return the alerts for the notification bell.
+
+    Coach chat must keep using the form `u_*` user from `/onboard` — this pack is alerts-only.
+    """
+    matched = matchdemo.match_customer(
+        goals=req.goals,
+        monthly_income=req.monthly_income,
+        monthly_debt_payments=req.monthly_debt_payments,
+        understanding_focus=req.understanding_focus,
+    )
+    _user_or_404(matched["user_id"])
+    found = fraud.seed_suspicious_demo(matched["user_id"], explain=req.explain)
+    return {
+        "matched_user_id": matched["user_id"],
+        "name": matched["name"],
+        "match_reason": matched["reason"],
+        "match_score": matched["score"],
+        "demo_goals": matched["goals"],
+        "has_vehicle": matched["has_vehicle"],
+        "count": len(found),
+        "alerts": found,
+    }
 
 
 @app.post("/handoff")

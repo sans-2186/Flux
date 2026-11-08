@@ -38,11 +38,13 @@ ALERT_PROMPT = (
 _history_cache = None
 _alerts = []
 _learned = defaultdict(set)
+_seeded_demo = set()
 
 
 def reset():
     _alerts.clear()
     _learned.clear()
+    _seeded_demo.clear()
 
 
 def _history():
@@ -165,3 +167,43 @@ def alerts_for(user_id: str, explain: bool = True) -> list:
         out.append({**{k: a[k] for k in ("alert_id", "severity", "transaction", "flags")},
                     "explanation": text, "explanation_source": source})
     return out
+
+
+def seed_suspicious_demo(user_id: str, explain: bool = False) -> list:
+    """Post the two classic suspicious charges used in Phase 3 demos (idempotent per user).
+
+    1) Unusually large purchase vs this customer's own dining history
+    2) New merchant + foreign country + odd hour (high severity)
+    """
+    if user_id in _seeded_demo or any(a["user_id"] == user_id for a in _alerts):
+        _seeded_demo.add(user_id)
+        return alerts_for(user_id, explain=explain)
+
+    hist = _history().get(user_id, {})
+    dining = hist.get("dining") or hist.get("_all") or []
+    if len(dining) >= MIN_HISTORY:
+        mean = statistics.fmean(dining)
+        # Large enough to clear both the 1.5x mean and z-score >= 3 gates when std is normal.
+        std = statistics.pstdev(dining) or mean * 0.2
+        amount = max(mean * 4.0, mean + Z_LIMIT * std + 1.0, NO_HISTORY_LIMIT)
+    else:
+        amount = NO_HISTORY_LIMIT + 50.0
+
+    record_transaction(
+        user_id,
+        round(amount, 2),
+        "Chipotle",
+        "dining",
+        "US",
+        datetime(2026, 11, 7, 12, 30),
+    )
+    record_transaction(
+        user_id,
+        40.0,
+        "Crypto Exchange Ltd",
+        "shopping",
+        "RO",
+        datetime(2026, 11, 7, 3, 12),
+    )
+    _seeded_demo.add(user_id)
+    return alerts_for(user_id, explain=explain)
