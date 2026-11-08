@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Flux Financial Companion",
+  "version": "1.0.0",
+  "description": "Popup money coach on Toyota listings using your Flux onboarding numbers.",
+  "permissions": [],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "https://www.toyotaofplano.com/*",
+    "https://*.toyota.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.toyotaofplano.com/*",
+        "https://*.toyota.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["flux-logo.png", "content.css"],
+      "matches": [
+        "https://www.toyotaofplano.com/*",
+        "https://*.toyota.com/*"
+      ]
+    }
+  ]
+}

@@ -148,6 +148,38 @@ export async function askCoach(
   return { reply: answer.reply, source: answer.source, toolsUsed: answer.tools_used }
 }
 
+export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<string | null> {
+  const result = await post<{ transcript: string | null }>('/transcribe', {
+    audio_base64: audioBase64,
+    mime_type: mimeType,
+  }, 25000)
+  const text = result.transcript?.trim()
+  return text || null
+}
+
+export type CompanionSession = {
+  option: 'buy-now' | 'wait' | 'cheaper'
+  option_label: string
+  vehicle_name: string
+  vehicle_price: number
+  scenario: {
+    price: number
+    down: number
+    apr: number
+    term: number
+    insurance: number
+    running: number
+    fees: number
+  }
+  profile: FinancialProfile
+  snapshot: FinancialSnapshot
+  user_id?: string
+}
+
+export async function saveCompanionSession(session: CompanionSession): Promise<void> {
+  await post('/companion-session', session, 8000)
+}
+
 let currentAudio: HTMLAudioElement | null = null
 
 export function stopSpeaking() {

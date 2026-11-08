@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
-from app import agent, finance, fraud, handoff, llm, matchdemo, mockdata, store, toyota, voice
+from app import agent, companion, finance, fraud, handoff, llm, matchdemo, mockdata, store, toyota, voice
 
 app = FastAPI(title="Flux API", version="0.2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -60,6 +60,11 @@ class SpeakRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     voice: Optional[str] = Field(default=None, description="Optional Gemini voice name, e.g. Kore (default), Puck, "
                                  "Charon, Aoede, Zephyr, Fenrir, Leda, Orus. Leave out to use the default.")
+
+
+class TranscribeRequest(BaseModel):
+    audio_base64: str = Field(min_length=8)
+    mime_type: str = Field(default="audio/webm", max_length=80)
 
 
 class TransactionRequest(BaseModel):
@@ -203,6 +208,26 @@ def chat(req: ChatRequest = Body(openapi_examples=CHAT_EXAMPLES)):
         # Presentation-safe: HTTP 200 + canned education copy instead of 502
         text, source = llm._offline_answer(req.message)
     return ChatResponse(reply=llm.with_disclaimer(text), mode="education", source=source)
+
+
+@app.post("/transcribe")
+def transcribe(req: TranscribeRequest):
+    """Speech-to-text for the Flux AI mic. Always HTTP 200; `transcript` is null if nothing was heard."""
+    return voice.transcribe(req.audio_base64, req.mime_type)
+
+
+@app.post("/companion-session")
+def save_companion_session(payload: dict = Body(...)):
+    """Store the compare-path snapshot the Chrome companion popup reads on a Toyota listing."""
+    return companion.save(payload)
+
+
+@app.get("/companion-session")
+def get_companion_session():
+    data = companion.load()
+    if data is None:
+        raise HTTPException(status_code=404, detail="No companion session yet. Open a compare path in Flux first.")
+    return data
 
 
 @app.post("/speak")

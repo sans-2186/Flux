@@ -23,10 +23,15 @@ import {
   clearDemoPackCache,
   getBackendUserId,
   loadDemoPack,
+  saveCompanionSession,
   speakReply,
   stopSpeaking,
+  transcribeAudio,
   type DemoAlert,
 } from './flux-backend'
+
+const TOYOTA_LISTING_URL =
+  'https://www.toyotaofplano.com/?utm_source=flux&utm_medium=companion'
 import { FinancialCompanion } from './FinancialCompanion'
 
 const fluxLogo = '/flux-logo.png'
@@ -522,6 +527,8 @@ function App() {
   const [chat, setChat] = useState<{ id?: number; from: 'ai' | 'user'; text: string; pending?: boolean }[]>([])
   const [chatInput, setChatInput] = useState('')
   const [isListening, setIsListening] = useState(false)
+  const [voicePhase, setVoicePhase] = useState<'idle' | 'recording' | 'transcribing'>('idle')
+  const [voiceSeconds, setVoiceSeconds] = useState(0)
   const [voiceMessage, setVoiceMessage] = useState('')
   const [completed, setCompleted] = useState<boolean[]>([false, false, false])
   const [toast, setToast] = useState('')
@@ -538,6 +545,9 @@ function App() {
   const chatIdRef = useRef(0)
   const lastInputWasVoiceRef = useRef(false)
   const voiceTranscriptRef = useRef('')
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaChunksRef = useRef<Blob[]>([])
+  const mediaStreamRef = useRef<MediaStream | null>(null)
   const recognitionRef = useRef<{
     start: () => void
     stop: () => void
@@ -764,9 +774,18 @@ function App() {
   useEffect(
     () => () => {
       recognitionRef.current?.abort()
+      mediaRecorderRef.current?.stop()
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
     },
     [],
   )
+
+  useEffect(() => {
+    if (!isListening) return undefined
+    setVoiceSeconds(0)
+    const timer = window.setInterval(() => setVoiceSeconds((value) => value + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [isListening])
 
   useEffect(() => {
     if (!hasLoadedApi) return
@@ -987,6 +1006,46 @@ function App() {
     window.setTimeout(() => setToast(''), 2200)
   }
 
+  const openShoppingCompanion = async (
+    option: 'buy-now' | 'wait' | 'cheaper',
+    optionLabel: string,
+    scenario: SimulatorData,
+  ) => {
+    setSim(scenario)
+    setCompanionStartIndex(option === 'cheaper' ? 1 : 0)
+    const vehicleName = option === 'cheaper' ? '2025 Toyota Corolla L' : '2026 Toyota Corolla LE'
+    try {
+      const userId = await getBackendUserId(finance, snapshot, authUser?.fullName).catch(() => undefined)
+      await saveCompanionSession({
+        option,
+        option_label: optionLabel,
+        vehicle_name: vehicleName,
+        vehicle_price: scenario.price,
+        scenario: {
+          price: scenario.price,
+          down: scenario.down,
+          apr: scenario.apr,
+          term: scenario.term,
+          insurance: scenario.insurance,
+          running: scenario.running,
+          fees: scenario.fees,
+        },
+        profile: finance,
+        snapshot,
+        user_id: userId,
+      })
+    } catch {
+      // Toyota tab still opens; the extension uses defaults if the session is missing.
+    }
+    const opened = window.open(`${TOYOTA_LISTING_URL}&flux_option=${option}`, 'flux-toyota')
+    if (!opened) {
+      go('extension')
+      showToast('Popup blocked — showing the companion in Flux.')
+      return
+    }
+    showToast('Toyota listing opened. The Flux companion pops up if the Chrome extension is loaded.')
+  }
+
   const handleSignup = async (event: FormEvent) => {
     event.preventDefault()
     setAuthError('')
@@ -1127,11 +1186,66 @@ function App() {
     sendPrompt(chatInput.trim())
     setChatInput('')
   }
-  const toggleVoiceInput = () => {
-    if (isListening) {
-      recognitionRef.current?.stop()
+  const stopMicTracks = () => {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+  }
+
+  const finishVoicePrompt = async (typedFallback: string) => {
+    setVoicePhase('transcribing')
+    setVoiceMessage('Turning your recording into text…')
+    const chunks = mediaChunksRef.current
+    mediaChunksRef.current = []
+    let spoken = voiceTranscriptRef.current.trim()
+    if (!spoken && chunks.length && typeof MediaRecorder !== 'undefined') {
+      try {
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' })
+        if (blob.size > 256) {
+          const audioBase64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onloadend = () => {
+              const dataUrl = String(reader.result || '')
+              resolve(dataUrl.split(',')[1] || '')
+            }
+            reader.onerror = reject
+            reader.readAsDataURL(blob)
+          })
+          spoken = (await transcribeAudio(audioBase64, blob.type || 'audio/webm')) || ''
+        }
+      } catch {
+        spoken = ''
+      }
+    }
+    setVoicePhase('idle')
+    setIsListening(false)
+    if (spoken) {
+      lastInputWasVoiceRef.current = true
+      setChatInput('')
+      setVoiceMessage(`Heard: “${spoken}”`)
+      void sendPrompt(spoken)
       return
     }
+    if (typedFallback) {
+      lastInputWasVoiceRef.current = true
+      setChatInput('')
+      void sendPrompt(typedFallback)
+      return
+    }
+    setVoiceMessage('Mic was on, but nothing was heard. Check Chrome microphone permission and try again.')
+  }
+
+  const toggleVoiceInput = async () => {
+    if (isListening || voicePhase === 'recording') {
+      recognitionRef.current?.stop()
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+      } else {
+        stopMicTracks()
+        void finishVoicePrompt(chatInput.trim())
+      }
+      return
+    }
+    if (voicePhase === 'transcribing') return
 
     type SpeechResult = {
       isFinal: boolean
@@ -1156,24 +1270,44 @@ function App() {
       webkitSpeechRecognition?: SpeechRecognitionConstructor
     }
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
+    const startingText = chatInput.trim()
+    voiceTranscriptRef.current = startingText
+    mediaChunksRef.current = []
 
-    if (!Recognition) {
-      setVoiceMessage('Voice input needs Chrome or Edge. You can still type your question.')
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : ''
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) mediaChunksRef.current.push(event.data)
+      }
+      recorder.onstop = () => {
+        stopMicTracks()
+        mediaRecorderRef.current = null
+        void finishVoicePrompt(startingText)
+      }
+      recorder.start(250)
+      setIsListening(true)
+      setVoicePhase('recording')
+      setVoiceMessage('Mic is on — speak, then tap the red button to send.')
+    } catch {
+      setIsListening(false)
+      setVoicePhase('idle')
+      setVoiceMessage('Microphone access was blocked. Allow the mic for localhost:3000 in Chrome settings.')
       return
     }
 
+    if (!Recognition) return
     const recognition = new Recognition()
-    const startingText = chatInput.trim()
-    let sawError = false
-    voiceTranscriptRef.current = startingText
-    // Keep listening until the user taps the mic again, then send.
     recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = navigator.language || 'en-US'
-    recognition.onstart = () => {
-      setVoiceMessage('Listening… tap the mic when you are done.')
-      setIsListening(true)
-    }
     recognition.onresult = (event) => {
       let finalText = ''
       let interimText = ''
@@ -1187,42 +1321,18 @@ function App() {
       voiceTranscriptRef.current = next
       lastInputWasVoiceRef.current = true
       setChatInput(next)
-      setVoiceMessage('Listening… tap the mic to send.')
     }
-    recognition.onerror = (event) => {
-      sawError = true
-      setIsListening(false)
-      setVoiceMessage(
-        event.error === 'not-allowed' || event.error === 'service-not-allowed'
-          ? 'Microphone access was blocked. Allow access in your browser to use voice input.'
-          : event.error === 'no-speech'
-            ? 'No speech was detected. Try again when you’re ready.'
-            : 'Voice input stopped unexpectedly. You can try again or continue typing.',
-      )
+    recognition.onerror = () => {
+      recognitionRef.current = null
     }
     recognition.onend = () => {
-      setIsListening(false)
       recognitionRef.current = null
-      const spoken = voiceTranscriptRef.current.trim()
-      if (!sawError && spoken && spoken !== startingText) {
-        lastInputWasVoiceRef.current = true
-        setChatInput('')
-        setVoiceMessage('')
-        void sendPrompt(spoken)
-        return
-      }
-      if (!sawError) {
-        setVoiceMessage('No speech was detected. Tap the mic to try again, or type your question.')
-      }
     }
     recognitionRef.current = recognition
-    setVoiceMessage('')
     try {
       recognition.start()
     } catch {
       recognitionRef.current = null
-      setIsListening(false)
-      setVoiceMessage('Voice input could not start. You can try again or continue typing.')
     }
   }
 
@@ -2136,6 +2246,27 @@ function App() {
             <Icon name="send" />
           </button>
         </form>
+        {(isListening || voicePhase !== 'idle') && (
+          <div className="voice-capture-overlay" role="status" aria-live="polite">
+            <div className="voice-capture-card">
+              <div className={`voice-orb ${voicePhase === 'transcribing' ? 'busy' : 'live'}`} />
+              <strong>
+                {voicePhase === 'transcribing' ? 'Turning that into text…' : 'Mic is on'}
+              </strong>
+              <p>
+                {voicePhase === 'transcribing'
+                  ? 'Sending your recording to Flux.'
+                  : `Recording ${voiceSeconds}s — speak, then tap Stop to send.`}
+              </p>
+              {chatInput ? <em>{chatInput}</em> : <em>Waiting for speech…</em>}
+              {voicePhase === 'recording' && (
+                <button type="button" onClick={() => void toggleVoiceInput()}>
+                  Stop & send
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {voiceMessage && (
           <p className="voice-input-status" role="status" aria-live="polite">
             {voiceMessage}
@@ -2860,8 +2991,7 @@ function App() {
           <button
             className="companion-entry"
             onClick={() => {
-              setCompanionStartIndex(0)
-              go('extension')
+              void openShoppingCompanion('buy-now', 'Buy now', sim)
             }}
           >
             <span className="companion-entry-icon">
@@ -2869,8 +2999,8 @@ function App() {
             </span>
             <span>
               <span className="eyebrow">Shopping companion</span>
-              <strong>See how a car listing hits your budget</strong>
-              <small>Same Flux coach — loan options and purchase impact.</small>
+              <strong>See this listing on Toyota of Plano</strong>
+              <small>Opens the dealer site with the Flux popup if the extension is loaded.</small>
             </span>
             <Icon name="arrow" size={18} />
           </button>
@@ -3294,18 +3424,11 @@ function App() {
                     <Button
                       variant="secondary"
                       onClick={() => {
-                        if (i === 2) {
-                          setCompanionStartIndex(1)
-                          setSim(comparison.input)
-                          go('extension')
-                          return
-                        }
-                        setSim(comparison.input)
-                        showToast(`${scenario.name} selected`)
-                        go('simulator')
+                        const option = i === 0 ? 'buy-now' : i === 1 ? 'wait' : 'cheaper'
+                        void openShoppingCompanion(option, scenario.name, comparison.input)
                       }}
                     >
-                      {i === 2 ? 'Explore Cheaper Options' : 'Review This Path'}
+                      Open companion on Toyota
                     </Button>
                     <Button variant="ghost" onClick={() => go('ai')}>
                       Ask Flux to Explain

@@ -21,6 +21,11 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - Matching lives in `app/matchdemo.py`; seeding is idempotent in `fraud.seed_suspicious_demo`.
 
 
+## Voice mic + Toyota companion popup
+
+- Flux AI mic **records** with `MediaRecorder` (red overlay + timer). Stop sends the clip to `POST /transcribe` (Gemini) or live captions, then `/chat`.
+- Compare **all three paths** open Toyota of Plano and save `POST /companion-session`. Chrome extension in `extension/` injects the companion popup on that HTTPS dealer page.
+
 ## Shopping companion (Explore cheaper options)
 
 - Simulator → Compare → **Explore Cheaper Options** opens the Flux Financial Companion (from Flux_UI), without the mock Toyota website.

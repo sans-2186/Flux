@@ -94,6 +94,45 @@ def _discover_tts_models(client, tried: list) -> list:
     return [n for n in names if n not in tried][:3]
 
 
+def transcribe(audio_base64: str, mime_type: str = "audio/webm") -> dict:
+    """Speech-to-text via Gemini. Never raises. `transcript` is None when nothing could be heard."""
+    client = llm.get_client()
+    if client is None:
+        return {"transcript": None, "source": "none", "reason": "no GEMINI_API_KEY configured"}
+    try:
+        raw = base64.b64decode(audio_base64)
+    except Exception as e:
+        return {"transcript": None, "source": "none", "reason": f"invalid audio: {e}"}
+    if len(raw) < 64:
+        return {"transcript": None, "source": "none", "reason": "audio too short"}
+    from google.genai import types
+    model = os.getenv("GEMINI_STT_MODEL") or llm.GEMINI_MODEL
+    prompt = (
+        "Transcribe this spoken English exactly. Return only the words the person said, "
+        "no quotes, labels, or extra commentary. If there is no speech, return EMPTY."
+    )
+    try:
+        resp = client.models.generate_content(
+            model=model,
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_bytes(data=raw, mime_type=mime_type or "audio/webm"),
+                        types.Part.from_text(text=prompt),
+                    ],
+                )
+            ],
+        )
+        text = (resp.text or "").strip().strip('"')
+        if not text or text.upper() in {"EMPTY", "(EMPTY)", "N/A"}:
+            return {"transcript": None, "source": f"gemini:{model}", "reason": "no speech detected"}
+        return {"transcript": text, "source": f"gemini:{model}"}
+    except Exception as e:
+        log.warning("Gemini transcribe failed: %s", e)
+        return {"transcript": None, "source": "none", "reason": str(e)[:300]}
+
+
 def speak(text: str, voice: str = None) -> dict:
     """Returns {audio_base64, mime_type, source, ...}. audio_base64 is None when the frontend should
     use the browser's speech synthesis instead (source = "browser_speech"; `reason` says why)."""
