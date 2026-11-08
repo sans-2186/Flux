@@ -94,6 +94,67 @@ def _discover_tts_models(client, tried: list) -> list:
     return [n for n in names if n not in tried][:3]
 
 
+SUPPORTED_AUDIO = {"audio/wav", "audio/mp3", "audio/mpeg", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"}
+
+
+def _audio_mime(mime_type: str) -> str:
+    """Gemini only accepts a short list of audio types and rejects codec parameters."""
+    base = (mime_type or "").split(";")[0].strip().lower()
+    if base == "audio/x-wav":
+        base = "audio/wav"
+    return base if base in SUPPORTED_AUDIO else "audio/wav"
+
+
+def transcribe(audio_base64: str, mime_type: str = "audio/wav") -> dict:
+    """Speech-to-text via Gemini. Never raises. `transcript` is None when nothing could be heard."""
+    client = llm.get_client()
+    if client is None:
+        return {"transcript": None, "source": "none", "reason": "no GEMINI_API_KEY configured"}
+    try:
+        raw = base64.b64decode(audio_base64)
+    except Exception as e:
+        return {"transcript": None, "source": "none", "reason": f"invalid audio: {e}"}
+    if len(raw) < 64:
+        return {"transcript": None, "source": "none", "reason": "audio too short"}
+    from google.genai import types
+    preferred = os.getenv("GEMINI_STT_MODEL")
+    chain = list(dict.fromkeys(([preferred] if preferred else []) + llm.MODEL_CHAIN))
+    prompt = (
+        "Transcribe this spoken English exactly. Return only the words the person said, "
+        "no quotes, labels, or extra commentary. If there is no speech, return EMPTY."
+    )
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_bytes(data=raw, mime_type=_audio_mime(mime_type)),
+                types.Part.from_text(text=prompt),
+            ],
+        )
+    ]
+    last_error = "no model answered"
+    busy = False
+    for model in chain:
+        for attempt in range(2):
+            try:
+                resp = client.models.generate_content(model=model, contents=contents)
+                text = (resp.text or "").strip().strip('"')
+                if not text or text.upper() in {"EMPTY", "(EMPTY)", "N/A"}:
+                    return {"transcript": None, "source": f"gemini:{model}", "reason": "no speech detected"}
+                return {"transcript": text, "source": f"gemini:{model}"}
+            except Exception as e:
+                log.warning("Gemini transcribe %s attempt %d failed: %s", model, attempt + 1, e)
+                last_error = str(e)[:300]
+                if llm._retryable(e):
+                    busy = True
+                    if attempt < 1:
+                        time.sleep(0.25)
+                        continue
+                break
+    reason = "Gemini is busy right now" if busy else last_error
+    return {"transcript": None, "source": "none", "reason": reason}
+
+
 def speak(text: str, voice: str = None) -> dict:
     """Returns {audio_base64, mime_type, source, ...}. audio_base64 is None when the frontend should
     use the browser's speech synthesis instead (source = "browser_speech"; `reason` says why)."""

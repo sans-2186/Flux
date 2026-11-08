@@ -2,7 +2,20 @@ import type { FinancialProfile, FinancialSnapshot } from './flux-api-client'
 
 // Flux Python backend (FastAPI). Run it with: uvicorn app.main:app --port 8000
 // Override in .env.local:  NEXT_PUBLIC_FLUX_BACKEND_URL=http://localhost:8000
-const BASE = (process.env.NEXT_PUBLIC_FLUX_BACKEND_URL || 'http://localhost:8000').replace(/\/+$/, '')
+// On Vercel the backend is the `app` service behind the /api/flux rewrite, so a same-origin
+// relative base is correct there and no environment variable is needed.
+const DEPLOYED_BASE = '/api/flux'
+
+function resolveBase(): string {
+  const configured = process.env.NEXT_PUBLIC_FLUX_BACKEND_URL
+  if (configured) return configured.replace(/\/+$/, '')
+  if (typeof window === 'undefined') return DEPLOYED_BASE
+  const host = window.location.hostname
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '[::1]'
+  return isLocal ? 'http://localhost:8000' : DEPLOYED_BASE
+}
+
+const BASE = resolveBase()
 // Optional: skip onboarding and always use one backend demo customer (C001..C030, TY-C001..TY-C020).
 const FIXED_USER = process.env.NEXT_PUBLIC_FLUX_USER_ID || ''
 const STORAGE_KEY = 'flux-backend-user'
@@ -148,6 +161,96 @@ export async function askCoach(
   return { reply: answer.reply, source: answer.source, toolsUsed: answer.tools_used }
 }
 
+function encodeWav(samples: Float32Array, sampleRate: number): Blob {
+  const buffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(buffer)
+  const writeText = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  writeText(0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  writeText(8, 'WAVE')
+  writeText(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeText(36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+  for (let i = 0; i < samples.length; i += 1) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(44 + i * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true)
+  }
+  return new Blob([buffer], { type: 'audio/wav' })
+}
+
+/** Gemini rejects WebM/Opus, so decode the recording and re-encode it as mono 16 kHz WAV. */
+export async function blobToWav(blob: Blob): Promise<Blob> {
+  const AudioCtx =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AudioCtx) return blob
+  const context = new AudioCtx()
+  try {
+    const decoded = await context.decodeAudioData(await blob.arrayBuffer())
+    const targetRate = 16000
+    const frames = Math.max(1, Math.ceil(decoded.duration * targetRate))
+    const OfflineCtx =
+      window.OfflineAudioContext ||
+      (window as typeof window & { webkitOfflineAudioContext?: typeof OfflineAudioContext })
+        .webkitOfflineAudioContext
+    if (!OfflineCtx) return blob
+    const offline = new OfflineCtx(1, frames, targetRate)
+    const source = offline.createBufferSource()
+    source.buffer = decoded
+    source.connect(offline.destination)
+    source.start()
+    const rendered = await offline.startRendering()
+    return encodeWav(rendered.getChannelData(0), targetRate)
+  } catch {
+    return blob
+  } finally {
+    void context.close()
+  }
+}
+
+export async function transcribeAudio(
+  audioBase64: string,
+  mimeType: string,
+): Promise<{ transcript: string | null; reason?: string }> {
+  const result = await post<{ transcript: string | null; reason?: string }>('/transcribe', {
+    audio_base64: audioBase64,
+    mime_type: mimeType,
+  }, 30000)
+  return { transcript: result.transcript?.trim() || null, reason: result.reason }
+}
+
+export type CompanionSession = {
+  option: 'buy-now' | 'wait' | 'cheaper'
+  option_label: string
+  vehicle_name: string
+  vehicle_price: number
+  scenario: {
+    price: number
+    down: number
+    apr: number
+    term: number
+    insurance: number
+    running: number
+    fees: number
+  }
+  profile: FinancialProfile
+  snapshot: FinancialSnapshot
+  user_id?: string
+}
+
+export async function saveCompanionSession(session: CompanionSession): Promise<void> {
+  await post('/companion-session', session, 8000)
+}
+
 let currentAudio: HTMLAudioElement | null = null
 
 export function stopSpeaking() {
@@ -200,6 +303,7 @@ export async function speakReply(
 export type DemoAlert = {
   alert_id: string
   severity: string
+  summary?: string
   explanation: string
   explanation_source: string
   flags: { id: string; detail: string }[]

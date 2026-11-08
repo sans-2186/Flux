@@ -21,11 +21,34 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - Matching lives in `app/matchdemo.py`; seeding is idempotent in `fraud.seed_suspicious_demo`.
 
 
+## Voice mic + Toyota companion popup
+
+- Flux AI mic **records** with `MediaRecorder` (red overlay, timer, live input-level bar). Stop sends the clip to `POST /transcribe` (Gemini) or live captions, then `/chat`.
+- The clip is re-encoded to **mono 16 kHz WAV** in the browser before upload — Gemini rejects WebM/Opus, which is why earlier recordings transcribed to nothing. `voice._audio_mime` also strips codec parameters server-side.
+- When nothing is heard the overlay now reports the actual reason (permission, empty clip, or the backend's error) instead of a generic message.
+- Compare **all three paths** open a real Toyota model page (`/camry`, `/corolla`, `/corollahatchback`) and save `POST /companion-session`. The Chrome extension in `extension/` injects the companion popup there and reads the vehicle name and price **off that page**, running it through the path's loan terms.
+- Toyota 301-redirects trailing slashes and query strings away, so the compare path travels in the URL **hash** (`#flux_option=...`); each path opens its own tab.
+- Extension hardening: CSS inlined (strict page CSP blocked fetching extension files), logo drawn in CSS, `toyota.com` apex added to the match patterns, and the panel re-mounts every 2s so Toyota's late hydration cannot wipe it. The panel renders with example numbers when the backend is down.
+- `/transcribe` now walks `llm.MODEL_CHAIN` with one retry each and reports "Gemini is busy right now" on 429/503; browser speech recognition restarts across pauses so live captions stay the primary path.
+- Notification alerts carry a one-line `summary`; the long explanation sits behind a "Why Flux flagged it" toggle.
+
 ## Shopping companion (Explore cheaper options)
 
 - Simulator → Compare → **Explore Cheaper Options** opens the Flux Financial Companion (from Flux_UI), without the mock Toyota website.
 - Companion uses the same `/chat` coach (`askCoach`) with car/loan context for affordability and purchase-impact questions.
 - Vehicle matches (current / cheaper / higher) update the snapshot; loan assumptions stay editable.
+
+## Vercel deployment (services)
+
+- `vercel.json` declares two services: **`app`** (FastAPI, repo root) and **`ui`** (Next.js, `ui/`).
+- Public routing: `/api/flux/*` → `app`, catch-all `/(.*)` → `ui`. Both are public because the browser and the Chrome extension call the backend directly.
+- `ui` declares a binding to `app` (`FLUX_APP_URL`) for server-side calls; today all backend calls are client-side and go through the `/api/flux` rewrite.
+- `StripPrefix` middleware in `app/main.py` serves every route bare (local uvicorn) and under `FLUX_API_PREFIX` (default `/api/flux`), so no route definitions changed.
+- `main.py` at the repo root re-exports the app for Vercel's FastAPI runtime; `store._path()` falls back to `/tmp/flux-users.json` when `VERCEL` is set.
+- The UI picks its backend base automatically: `localhost:8000` when served from localhost, `/api/flux` otherwise. `NEXT_PUBLIC_FLUX_BACKEND_URL` still overrides.
+- The extension tries `127.0.0.1:8000` first and falls back to `https://myflux.us/api/flux`.
+- **Demo-only build on CI:** `payload build` fails on Vercel with `Environment ID could not be resolved` because the Figma/Payload platform resolves `FIGMA_EID` from a local project cache. `ui/scripts/vercel-prepare.mjs` therefore removes `src/app/(payload)` and `src/app/(frontend)/flux-api` when `FIGMA_EID` / `FIGMA_CONTENT_API_CONTENT_SYSTEM_ID` are absent, and the service builds with plain `next build`. Set both variables (or `FLUX_DEMO_ONLY=0`) to keep the admin. Local `pnpm dev` is untouched.
+- `app` still needs `GEMINI_API_KEY` in Vercel's environment variables, or the coach falls back to mock replies.
 
 ## Saved checkpoints
 

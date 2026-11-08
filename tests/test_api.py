@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 from fastapi.testclient import TestClient
 
-from app import llm, store
+from app import companion, llm, store, voice
 from app.main import app
 
 client = TestClient(app)
@@ -21,6 +21,7 @@ PROFILE = {"name": "Sam", "age": 22, "monthly_income": 3000, "monthly_expenses":
 def isolated_store(tmp_path, monkeypatch):
     monkeypatch.setenv("FLUX_DATA_FILE", str(tmp_path / "users.json"))
     monkeypatch.setattr(store, "_users", None)
+    companion.reset()
 
 
 def onboard():
@@ -209,3 +210,33 @@ def test_toyota_chat_falls_back_to_data_summary_without_gemini(monkeypatch):
     r = client.post("/chat", json={"message": "what should I do?", "user_id": "TY-C001"}).json()
     assert r["mode"] == "coach" and r["source"] == "fallback_health"
     assert "Refinance" in r["reply"] and r["reply"].endswith(llm.DISCLAIMER)
+
+
+def test_transcribe_without_key_does_not_500(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "_client", None)
+    r = client.post("/transcribe", json={"audio_base64": "AAAAAA==", "mime_type": "audio/webm"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["transcript"] is None and body["source"] == "none"
+
+
+def test_routes_answer_bare_and_under_the_public_vercel_prefix():
+    assert client.get("/demo-users").status_code == 200
+    assert client.get("/api/flux/demo-users").status_code == 200
+    assert client.get("/api/flux/").status_code == 200
+    assert client.get("/api/other/demo-users").status_code == 404
+
+
+def test_audio_mime_is_normalised_to_something_gemini_accepts():
+    assert voice._audio_mime("audio/webm;codecs=opus") == "audio/wav"
+    assert voice._audio_mime("audio/wav") == "audio/wav"
+    assert voice._audio_mime("audio/ogg; codecs=opus") == "audio/ogg"
+
+
+def test_companion_session_roundtrip():
+    assert client.get("/companion-session").status_code == 404
+    payload = {"option": "cheaper", "option_label": "Choose a lower-cost car", "scenario": {"price": 21900}}
+    saved = client.post("/companion-session", json=payload).json()
+    assert saved["option"] == "cheaper"
+    assert client.get("/companion-session").json()["scenario"]["price"] == 21900

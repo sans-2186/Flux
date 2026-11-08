@@ -13,7 +13,9 @@ _users = None
 
 
 def _path():
-    return Path(os.getenv("FLUX_DATA_FILE", "data/users.json"))
+    # Serverless filesystems are read-only apart from /tmp.
+    default = "/tmp/flux-users.json" if os.getenv("VERCEL") else "data/users.json"
+    return Path(os.getenv("FLUX_DATA_FILE", default))
 
 
 def _load():

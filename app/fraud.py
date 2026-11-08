@@ -29,11 +29,17 @@ WEIGHTS = {"large_amount": 2, "foreign": 2, "new_merchant": 1, "odd_hour": 1}
 MAX_LLM_EXPLANATIONS = 5
 
 ALERT_PROMPT = (
-    "You are Flux, a friendly money coach for Gen Z. A card transaction was flagged. Explain in 2-3 short "
-    "plain sentences why it looks unusual and what the user should do (check it; if it was them, nothing "
-    "more; if not, contact their bank). Use ONLY the facts given. Do not do any math and do not add numbers. "
-    "Do not say it is definitely fraud."
+    "You are Flux, a friendly money coach for Gen Z. A card transaction was flagged. In ONE sentence of at "
+    "most 20 words, say why it looks unusual and tell them to check it. Use ONLY the facts given. "
+    "No math, no numbers, no markdown. Do not say it is definitely fraud."
 )
+
+SHORT_REASON = {
+    "large_amount": "much bigger than usual",
+    "new_merchant": "a merchant you have not used",
+    "foreign": "charged outside the US",
+    "odd_hour": "made in the middle of the night",
+}
 
 _history_cache = None
 _alerts = []
@@ -144,6 +150,13 @@ def _plain_text(alert: dict) -> str:
             "If this was you, no action is needed. If not, contact your bank.")
 
 
+def short_text(alert: dict) -> str:
+    """One short line for the notification list (the long copy stays in `explanation`)."""
+    reasons = [SHORT_REASON.get(f["id"], f["id"].replace("_", " ")) for f in alert["flags"]][:2]
+    t = alert["transaction"]
+    return f"{_money(t['amount'])} at {t['merchant']} — {' and '.join(reasons)}."
+
+
 def explain_alert(alert: dict, use_llm: bool = True):
     if alert["explanation"]:
         return alert["explanation"], alert["explanation_source"]
@@ -165,6 +178,7 @@ def alerts_for(user_id: str, explain: bool = True) -> list:
     for i, a in enumerate(mine):
         text, source = explain_alert(a, use_llm=explain and i < MAX_LLM_EXPLANATIONS)
         out.append({**{k: a[k] for k in ("alert_id", "severity", "transaction", "flags")},
+                    "summary": short_text(a),
                     "explanation": text, "explanation_source": source})
     return out
 
