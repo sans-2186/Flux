@@ -1,0 +1,33 @@
+"""Tiny user store: a dict in memory, mirrored to a JSON file (default data/users.json)."""
+import json
+import os
+import uuid
+from pathlib import Path
+
+_users = None
+
+
+def _path():
+    return Path(os.getenv("FLUX_DATA_FILE", "data/users.json"))
+
+
+def _load():
+    global _users
+    if _users is None:
+        p = _path()
+        _users = json.loads(p.read_text()) if p.exists() else {}
+    return _users
+
+
+def add_user(record):
+    users = _load()
+    record["user_id"] = "u_" + uuid.uuid4().hex[:8]
+    users[record["user_id"]] = record
+    p = _path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(users, indent=2))
+    return record["user_id"]
+
+
+def get_user(user_id):
+    return _load().get(user_id)
