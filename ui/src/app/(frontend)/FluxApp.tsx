@@ -537,6 +537,7 @@ function App() {
   const profileTouchedRef = useRef(false)
   const chatIdRef = useRef(0)
   const lastInputWasVoiceRef = useRef(false)
+  const voiceTranscriptRef = useRef('')
   const recognitionRef = useRef<{
     start: () => void
     stop: () => void
@@ -1157,29 +1158,39 @@ function App() {
     const Recognition = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition
 
     if (!Recognition) {
-      setVoiceMessage('Voice input is not supported in this browser.')
+      setVoiceMessage('Voice input needs Chrome or Edge. You can still type your question.')
       return
     }
 
     const recognition = new Recognition()
     const startingText = chatInput.trim()
-    recognition.continuous = false
+    let sawError = false
+    voiceTranscriptRef.current = startingText
+    // Keep listening until the user taps the mic again, then send.
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = navigator.language || 'en-US'
     recognition.onstart = () => {
-      setVoiceMessage('Listening…')
+      setVoiceMessage('Listening… tap the mic when you are done.')
       setIsListening(true)
     }
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? '')
-        .join(' ')
-        .trim()
-      setChatInput([startingText, transcript].filter(Boolean).join(' '))
-      if (transcript) lastInputWasVoiceRef.current = true
-      setVoiceMessage('Listening… Speak naturally, then review your message.')
+      let finalText = ''
+      let interimText = ''
+      for (let i = 0; i < event.results.length; i += 1) {
+        const piece = event.results[i][0]?.transcript ?? ''
+        if (event.results[i].isFinal) finalText += (finalText ? ' ' : '') + piece
+        else interimText += (interimText ? ' ' : '') + piece
+      }
+      const spoken = [finalText, interimText].filter(Boolean).join(' ').trim()
+      const next = [startingText, spoken].filter(Boolean).join(' ').trim()
+      voiceTranscriptRef.current = next
+      lastInputWasVoiceRef.current = true
+      setChatInput(next)
+      setVoiceMessage('Listening… tap the mic to send.')
     }
     recognition.onerror = (event) => {
+      sawError = true
       setIsListening(false)
       setVoiceMessage(
         event.error === 'not-allowed' || event.error === 'service-not-allowed'
@@ -1192,9 +1203,17 @@ function App() {
     recognition.onend = () => {
       setIsListening(false)
       recognitionRef.current = null
-      setVoiceMessage((message) =>
-        message.startsWith('Listening') ? 'Voice input added. Review it, then send.' : message,
-      )
+      const spoken = voiceTranscriptRef.current.trim()
+      if (!sawError && spoken && spoken !== startingText) {
+        lastInputWasVoiceRef.current = true
+        setChatInput('')
+        setVoiceMessage('')
+        void sendPrompt(spoken)
+        return
+      }
+      if (!sawError) {
+        setVoiceMessage('No speech was detected. Tap the mic to try again, or type your question.')
+      }
     }
     recognitionRef.current = recognition
     setVoiceMessage('')
@@ -2100,7 +2119,7 @@ function App() {
               lastInputWasVoiceRef.current = false
               setChatInput(e.target.value)
             }}
-            placeholder="Ask Flux anything about your goal..."
+            placeholder={isListening ? 'Listening… tap the mic to send' : 'Ask Flux anything about your goal...'}
             aria-label="Message Flux AI"
           />
           <button
