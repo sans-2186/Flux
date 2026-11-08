@@ -10,8 +10,8 @@ from app import demo_fallbacks
 
 load_dotenv()
 
-# Lite default: much faster for 3–5 sentence Phase 1 answers than gemini-3.8-flash.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+# Primary: quality. Plan B (fallbacks): lite models when 503 / slow.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "280"))
 DISCLAIMER = "Not financial advice - just education to help you decide."
 
@@ -30,7 +30,7 @@ _client = None
 
 
 def _parse_fallback_models() -> list[str]:
-    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-3.1-flash-lite")
+    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-3.5-flash-lite,gemini-3.1-flash-lite")
     extra = [m.strip() for m in raw.split(",") if m.strip()]
     seen: set[str] = set()
     out: list[str] = []
