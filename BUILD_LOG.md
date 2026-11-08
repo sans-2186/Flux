@@ -13,6 +13,13 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - New coach tool `money_overview` (one-shot balances/surplus). Gemini thinking budget defaults to `0` for faster replies (`GEMINI_THINKING_BUDGET` to override).
 - Listen / voice replies use the browser `speechSynthesis` path by default (Gemini TTS was multi-second delay).
 
+
+## Demo alerts from onboarding match
+
+- `POST /demo-pack` picks the closest PNC customer (C001–C030) from onboarding goals/income/debt focus and seeds the two Phase-3 suspicious transactions against that ledger.
+- Home notification bell shows those flagged alerts. Coach chat still uses the form `u_*` user from `/onboard`, so editing income/rent/savings stays consistent.
+- Matching lives in `app/matchdemo.py`; seeding is idempotent in `fraud.seed_suspicious_demo`.
+
 ## Saved checkpoints
 
 Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished phase also gets a git tag.

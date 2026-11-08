@@ -18,7 +18,15 @@ import {
   type ScenarioResult,
   type OnboardingStep,
 } from './flux-api-client'
-import { askCoach, getBackendUserId, speakReply, stopSpeaking } from './flux-backend'
+import {
+  askCoach,
+  clearDemoPackCache,
+  getBackendUserId,
+  loadDemoPack,
+  speakReply,
+  stopSpeaking,
+  type DemoAlert,
+} from './flux-backend'
 
 const fluxLogo = '/flux-logo.png'
 
@@ -519,6 +527,8 @@ function App() {
   const [goalPickerOpen, setGoalPickerOpen] = useState(false)
   const [customGoal, setCustomGoal] = useState('')
   const [weeklyOpen, setWeeklyOpen] = useState(false)
+  const [demoAlerts, setDemoAlerts] = useState<DemoAlert[]>([])
+  const [demoMatchLabel, setDemoMatchLabel] = useState('')
   const [connectOpen, setConnectOpen] = useState(false)
   const [demoConnections, setDemoConnections] = useState<string[]>([])
   const [extensionStep, setExtensionStep] = useState(1)
@@ -845,6 +855,16 @@ function App() {
     }
   }, [sim, finance, contribution, hasLoadedApi])
 
+
+  useEffect(() => {
+    if (screen !== 'home' || demoAlerts.length > 0) return
+    void refreshDemoAlerts(
+      selectedGoals.length ? selectedGoals : goal ? [goal] : [],
+      understandingFocus || understandingFocuses[0],
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen])
+
   const saveScenario = async () => {
     setScenarioLoading(true)
     setScenarioError('')
@@ -944,8 +964,30 @@ function App() {
         snapshot,
         authUser?.fullName,
       ).catch(() => undefined)
+      void refreshDemoAlerts(resolvedGoals.length ? resolvedGoals : [selectedGoal], selectedFocus)
     }
   }
+  const refreshDemoAlerts = async (
+    goals: string[],
+    focus?: string,
+    nextFinance: FinanceProfile = finance,
+  ) => {
+    try {
+      const pack = await loadDemoPack({
+        goals: goals.filter(Boolean),
+        monthlyIncome: nextFinance.income,
+        monthlyDebtPayments: nextFinance.debt,
+        understandingFocus: focus,
+      })
+      setDemoAlerts(pack.alerts)
+      setDemoMatchLabel(`${pack.name} (${pack.matchedUserId})`)
+    } catch {
+      // Backend down: keep the static weekly tips; no crash.
+      setDemoAlerts([])
+      setDemoMatchLabel('')
+    }
+  }
+
   const showToast = (text: string) => {
     setToast(text)
     window.setTimeout(() => setToast(''), 2200)
@@ -1030,6 +1072,9 @@ function App() {
       setSelectedGoals([])
       setUnderstandingFocuses([])
       profileTouchedRef.current = false
+      clearDemoPackCache()
+      setDemoAlerts([])
+      setDemoMatchLabel('')
       setHistory([])
       setScreen('auth-welcome')
     }
@@ -2909,11 +2954,19 @@ function App() {
           <div className="home-header-actions">
             <button
               className={`notification-button ${weeklyOpen ? 'active' : ''}`}
-              onClick={() => setWeeklyOpen((open) => !open)}
-              aria-label="Open weekly suggestions"
+              onClick={() => {
+                setWeeklyOpen((open) => !open)
+                if (!demoAlerts.length) {
+                  void refreshDemoAlerts(
+                    selectedGoals.length ? selectedGoals : goal ? [goal] : [],
+                    understandingFocus,
+                  )
+                }
+              }}
+              aria-label="Open notifications"
             >
               <Icon name="bell" size={21} />
-              <span>2</span>
+              <span>{Math.max(demoAlerts.length, 1)}</span>
             </button>
             <button className="avatar-button" onClick={() => go('profile')}>
               A
@@ -2930,13 +2983,35 @@ function App() {
           <div className="weekly-panel">
             <div className="weekly-panel-heading">
               <div>
-                <span className="eyebrow">This week from Flux</span>
-                <h2>Two things worth reviewing</h2>
+                <span className="eyebrow">Notifications</span>
+                <h2>
+                  {demoAlerts.length
+                    ? `${demoAlerts.length} flagged transaction${demoAlerts.length === 1 ? '' : 's'}`
+                    : 'Things worth reviewing'}
+                </h2>
               </div>
-              <button onClick={() => setWeeklyOpen(false)} aria-label="Close weekly suggestions">
+              <button onClick={() => setWeeklyOpen(false)} aria-label="Close notifications">
                 ×
               </button>
             </div>
+            {demoAlerts.map((alert) => (
+              <article key={alert.alert_id}>
+                <span className={`weekly-icon ${alert.severity === 'high' ? 'peach' : 'sage'}`}>
+                  <Icon name="flag" size={18} />
+                </span>
+                <div>
+                  <strong>
+                    {alert.severity === 'high' ? 'High' : alert.severity === 'medium' ? 'Medium' : 'Low'}{' '}
+                    severity · {money(alert.transaction.amount)} at {alert.transaction.merchant}
+                  </strong>
+                  <p>{alert.explanation}</p>
+                  <p className="weekly-disclaimer" style={{ marginTop: 6 }}>
+                    {alert.flags.map((f) => f.id.replace(/_/g, ' ')).join(' · ')}
+                    {demoMatchLabel ? ` · ledger ${demoMatchLabel}` : ''}
+                  </p>
+                </div>
+              </article>
+            ))}
             <article>
               <span className="weekly-icon sage">
                 <Icon name="calendar" size={18} />
@@ -2981,7 +3056,8 @@ function App() {
               </div>
             </article>
             <p className="weekly-disclaimer">
-              Suggestions use example data and visible assumptions—not a connected account.
+              Flagged charges use a matched synthetic ledger from onboarding choices. Income, rent,
+              savings, and Flux AI still follow the numbers you edit.
             </p>
           </div>
         )}

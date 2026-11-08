@@ -196,3 +196,91 @@ export async function speakReply(
     return browserSpeak(text)
   }
 }
+
+export type DemoAlert = {
+  alert_id: string
+  severity: string
+  explanation: string
+  explanation_source: string
+  flags: { id: string; detail: string }[]
+  transaction: {
+    amount: number
+    merchant: string
+    category: string | null
+    country: string
+    timestamp: string
+  }
+}
+
+export type DemoPack = {
+  matchedUserId: string
+  name: string
+  matchReason: string
+  count: number
+  alerts: DemoAlert[]
+}
+
+const DEMO_PACK_KEY = 'flux-demo-pack'
+
+function readDemoPackCache(): DemoPack | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return JSON.parse(window.localStorage.getItem(DEMO_PACK_KEY) || 'null')
+  } catch {
+    return null
+  }
+}
+
+function writeDemoPackCache(value: DemoPack | null) {
+  if (typeof window === 'undefined') return
+  if (value) window.localStorage.setItem(DEMO_PACK_KEY, JSON.stringify(value))
+  else window.localStorage.removeItem(DEMO_PACK_KEY)
+}
+
+/** Match onboarding choices to a PNC demo customer and seed suspicious-transaction alerts.
+ * Does NOT change the coach user id — chat still uses the form profile from /onboard.
+ */
+export async function loadDemoPack(input: {
+  goals: string[]
+  monthlyIncome: number
+  monthlyDebtPayments: number
+  understandingFocus?: string
+}): Promise<DemoPack> {
+  const fingerprint = JSON.stringify(input)
+  const cached = readDemoPackCache() as (DemoPack & { fingerprint?: string }) | null
+  if (cached?.fingerprint === fingerprint && cached.alerts?.length) {
+    return cached
+  }
+  type Raw = {
+    matched_user_id: string
+    name: string
+    match_reason: string
+    count: number
+    alerts: DemoAlert[]
+  }
+  const raw = await post<Raw>(
+    '/demo-pack',
+    {
+      goals: input.goals,
+      monthly_income: input.monthlyIncome,
+      monthly_debt_payments: input.monthlyDebtPayments,
+      understanding_focus: input.understandingFocus || null,
+      explain: false,
+    },
+    12000,
+  )
+  const pack: DemoPack & { fingerprint: string } = {
+    matchedUserId: raw.matched_user_id,
+    name: raw.name,
+    matchReason: raw.match_reason,
+    count: raw.count,
+    alerts: raw.alerts,
+    fingerprint,
+  }
+  writeDemoPackCache(pack)
+  return pack
+}
+
+export function clearDemoPackCache() {
+  writeDemoPackCache(null)
+}
