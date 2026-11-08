@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs'
 import { withPayload } from '@payloadcms/next/withPayload'
 import type { NextConfig } from 'next'
 import path from 'path'
@@ -5,6 +6,16 @@ import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(__filename)
+
+// Vercel has no Figma/Payload project, and the demo never uses the admin. Drop those routes
+// before Next compiles them, and skip withPayload so a missing FIGMA_EID cannot fail the build.
+const demoOnlyOnVercel = process.env.VERCEL === '1' && process.env.FLUX_KEEP_PAYLOAD !== '1'
+if (demoOnlyOnVercel) {
+  for (const relative of ['src/app/(payload)', 'src/app/(frontend)/flux-api']) {
+    rmSync(path.join(dirname, relative), { recursive: true, force: true })
+  }
+  console.log('[flux] Vercel demo build: skipped the Payload admin')
+}
 
 const makePublicPreviewOrigin = (() => {
   const publicURL = process.env.FIGMA_PUBLIC_URL
@@ -76,4 +87,6 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default withPayload(nextConfig, { devBundleServerPackages: false })
+export default demoOnlyOnVercel
+  ? nextConfig
+  : withPayload(nextConfig, { devBundleServerPackages: false })
