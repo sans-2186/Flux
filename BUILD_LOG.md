@@ -20,6 +20,13 @@ Status: **Phase 1 done** (education `/chat`). **Phase 2 done** (`/onboard`, `/he
 - Home notification bell shows those flagged alerts. Coach chat still uses the form `u_*` user from `/onboard`, so editing income/rent/savings stays consistent.
 - Matching lives in `app/matchdemo.py`; seeding is idempotent in `fraud.seed_suspicious_demo`.
 
+
+## Shopping companion (Explore cheaper options)
+
+- Simulator → Compare → **Explore Cheaper Options** opens the Flux Financial Companion (from Flux_UI), without the mock Toyota website.
+- Companion uses the same `/chat` coach (`askCoach`) with car/loan context for affordability and purchase-impact questions.
+- Vehicle matches (current / cheaper / higher) update the snapshot; loan assumptions stay editable.
+
 ## Saved checkpoints
 
 Everything lives on `main` at https://github.com/sans-2186/Flux. Each finished phase also gets a git tag.
