@@ -4,3 +4,9 @@ __pycache__/
 .pytest_cache/
 .env
 data/*.json
+
+# UI (Next.js)
+ui/node_modules/
+ui/.next/
+ui/.env*
+ui/next-env.d.ts

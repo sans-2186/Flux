@@ -87,6 +87,7 @@ The vendored `wellness/` code uses only the standard library. We did **not** ins
 |---|---|
 | `app/main.py` | FastAPI app and endpoints: `GET /`, `GET /demo-users`, `POST /onboard`, `GET /health/{id}`, `GET /next-move/{id}`, `POST /chat`; CORS open |
 | `app/voice.py` | `/speak`: Gemini TTS (16-bit 24 kHz PCM wrapped into WAV), model fallback chain, browser-speech fallback; strips markdown before speaking |
+| `ui/` | Vendored Next.js frontend (from Cindiya/Flux_UI). Demo mode runs without Figma Payload; chat/voice call this FastAPI backend. See `ui/README.md` |
 | `frontend-integration/` | For the UI repo (https://github.com/Cindiya/Flux_UI): `flux-backend.ts` (client for `/onboard`, `/chat`, `/speak`), `flux-ui.patch` (wires it into the UI's chat; applies cleanly to Flux_UI@32f2cec), `README.md` (steps and profile mapping) |
 | `app/speak_demo.html` | One-page voice test served at `/speak-demo`: text box, voice picker, Speak button; plays Gemini audio or the browser's voice |
 | `app/fraud.py` | Phase 3: transaction flag rules (large amount, new merchant, foreign, odd hour), severity, alert store, Gemini plain-language explanation with fixed-text fallback |
